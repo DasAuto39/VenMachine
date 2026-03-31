@@ -1,0 +1,17 @@
+postgres@kamna-proprieatary:~$ psql
+psql (18.3 (Ubuntu 18.3-1.pgdg22.04+1))
+Type "help" for help.
+
+postgres=# CREATE DATABASE venmachince_db;
+CREATE DATABASE
+postgres=# CREATE USER protel WITH ENCRYPTED PASSWORD 'protelAsem6';
+CREATE ROLE
+postgres=# GRANT ALL PRIVILEGES ON DATABASE venmachine_db TO protel;
+ERROR:  database "venmachine_db" does not exist
+postgres=# CREATE DATABASE venmachine_db;
+CREATE DATABASE
+postgres=# GRANT ALL PRIVILEGES ON DATABASE venmachine_db TO protel;
+GRANT
+postgres=# DROP DATABASE venmachince_db;
+DROP DATABASE
+

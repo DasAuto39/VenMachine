@@ -1,0 +1,25 @@
+
+services:
+  db:
+    image: postgres:18-alpine
+    restart: always
+    environment:
+      POSTGRES_USER: protel
+      POSTGRES_PASSWORD: protelAsem6 # Silakan ganti dengan password Anda
+      POSTGRES_DB: venmachine_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  backend:
+    build: ./backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app  # Sinkronisasi folder agar fitur --reload tetap jalan saat Anda edit kode
+    depends_on:
+      - db
+
+volumes:
+  pg_data:
