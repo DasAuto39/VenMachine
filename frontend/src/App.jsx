@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 function App() {
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [cart, setCart] = useState({}); // Ubah dari array ke object: {itemId: {item, qty}}
   const [isCartOpen, setIsCartOpen] = useState(false);
 
@@ -74,28 +75,83 @@ function App() {
 
   const handleCheckout = async () => {
     if (Object.keys(cart).length === 0) return;
-    for (const itemId in cart) {
-      const { item, qty } = cart[itemId];
-      await fetch("http://127.0.0.1:8000/api/dispense", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ item_id: item.id, requested_qty: qty })
-      });
+    
+    try {
+      let successCount = 0;
+      let failCount = 0;
+      const errors = [];
+
+      for (const itemId in cart) {
+        const { item, qty } = cart[itemId];
+        try {
+          const res = await fetch("http://127.0.0.1:8000/api/dispense", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ item_id: item.id, requested_qty: qty })
+          });
+
+          if (res.ok) {
+            successCount += qty;
+          } else {
+            const errData = await res.json();
+            failCount += qty;
+            errors.push(`${item.name}: ${errData.detail}`);
+          }
+        } catch (err) {
+          failCount += qty;
+          errors.push(`${item.name}: Network error`);
+        }
+      }
+
+      if (successCount > 0) {
+        let message = `✅ Transaksi Sukses! ${successCount} barang sedang disiapkan di rak.`;
+        if (failCount > 0) {
+          message += `\n⚠️ ${failCount} barang gagal diproses: ${errors.join(', ')}`;
+        }
+        alert(message);
+        setCart({});
+        setIsCartOpen(false);
+        // Refresh produk list untuk update harga
+        const resItems = await fetch("http://127.0.0.1:8000/api/items");
+        const newItems = await resItems.json();
+        setItems(newItems);
+      } else {
+        alert(`❌ Semua barang gagal: ${errors.join(', ')}`);
+      }
+    } catch (err) {
+      console.error("Checkout error:", err);
+      alert("Terjadi kesalahan saat checkout!");
     }
-    const totalItems = Object.values(cart).reduce((sum, { qty }) => sum + qty, 0);
-    alert(`Transaksi Sukses! ${totalItems} barang sedang disiapkan di rak.`);
-    setCart({});
-    setIsCartOpen(false);
   };
 
   // Hitung total harga
   const cartTotal = Object.values(cart).reduce((sum, { item, qty }) => sum + (item.price * qty), 0);
   const cartItemCount = Object.values(cart).reduce((sum, { qty }) => sum + qty, 0);
 
-  const filteredItems = items.filter(item => 
-    item.name.toLowerCase().includes(search.toLowerCase()) || 
-    item.sku.toLowerCase().includes(search.toLowerCase())
-  );
+  const filteredItems = items.filter(item => {
+    const matchesSearch = item.name.toLowerCase().includes(search.toLowerCase()) || 
+                         item.sku.toLowerCase().includes(search.toLowerCase());
+    
+    if (selectedCategory === "Semua") {
+      return matchesSearch;
+    }
+    
+    // Map kategori ke jenis produk
+    const categoryMap = {
+      "Sayuran Segar": ["bayam", "wortel", "brokoli"],
+      "Buah Pilihan": ["apel", "pisang", "jeruk"],
+      "Sembako": ["beras", "minyak", "gula"],
+      "Minuman": ["susu", "jus", "air mineral"],
+      "Snack": ["chips", "kacang", "coklat"],
+      "Daging": []
+    };
+    
+    const itemNameLower = item.name.toLowerCase();
+    const categoryItems = categoryMap[selectedCategory] || [];
+    const matchesCategory = categoryItems.some(cat => itemNameLower.includes(cat));
+    
+    return matchesSearch && matchesCategory;
+  });
 
   const categories = ["Semua", "Sayuran Segar", "Buah Pilihan", "Sembako", "Minuman", "Snack", "Daging"];
 
@@ -157,7 +213,15 @@ function App() {
         <div className="mb-10">
           <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
             {categories.map((cat, idx) => (
-              <button key={idx} className="shrink-0 bg-white border border-slate-200 rounded-2xl px-6 py-3 font-semibold text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:shadow-md hover:-translate-y-1 transition-all">
+              <button 
+                key={idx} 
+                onClick={() => setSelectedCategory(cat)}
+                className={`shrink-0 px-6 py-3 font-semibold rounded-2xl transition-all ${
+                  selectedCategory === cat
+                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                    : 'bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:shadow-md hover:-translate-y-1'
+                }`}
+              >
                 {cat}
               </button>
             ))}
@@ -166,51 +230,61 @@ function App() {
 
         {/* 4. GRID PRODUK (Clean & Proper) */}
         <div>
-          <h2 className="text-xl font-black text-slate-800 mb-6">Etalase Produk</h2>
+          <h2 className="text-xl font-black text-slate-800 mb-6">
+            Etalase Produk {selectedCategory !== "Semua" && `- ${selectedCategory}`}
+            <span className="text-sm font-semibold text-slate-500 ml-2">({filteredItems.length} produk)</span>
+          </h2>
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
-            {filteredItems.map((item) => (
-              <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group">
-                
-                {/* Kotak Gambar Presisi */}
-                <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors">
-                  🛒
-                </div>
-                
-                <div className="px-2 flex-1 flex flex-col">
-                  {/* Badge Rak */}
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                    Lokasi: Rak {item.gate_code}
-                  </span>
-                  
-                  <h3 className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
-                  <p className="text-xs text-slate-400 font-mono mb-4">{item.sku}</p>
-                  
-                  <div className="mt-auto pt-3 border-t border-slate-100">
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex flex-col">
-                        <span className="text-xs text-slate-500">Harga</span>
-                        <span className="text-sm font-black text-emerald-600">
-                          Rp {(item.price || 0).toLocaleString('id-ID')}
-                        </span>
-                      </div>
-                      <div className="flex flex-col text-right">
-                        <span className="text-xs text-slate-500">Stok</span>
-                        <span className={`text-sm font-black ${item.stock_quantity > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {item.stock_quantity > 0 ? `${item.stock_quantity}` : 'Habis'}
-                        </span>
-                      </div>
-                    </div>
-                    <button 
-                      onClick={() => addToCart(item)}
-                      disabled={item.stock_quantity === 0}
-                      className="w-full bg-slate-900 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-30 disabled:hover:bg-slate-900"
-                    >
-                      + Keranjang
-                    </button>
-                  </div>
-                </div>
+            {filteredItems.length === 0 ? (
+              <div className="col-span-2 md:col-span-4 lg:col-span-5 text-center py-12 text-slate-400">
+                <p className="text-lg font-semibold">Tidak ada produk yang cocok</p>
+                <p className="text-sm">Coba ubah kategori atau search term</p>
               </div>
-            ))}
+            ) : (
+              filteredItems.map((item) => (
+                <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group">
+                  
+                  {/* Kotak Gambar Presisi */}
+                  <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors">
+                    🛒
+                  </div>
+                  
+                  <div className="px-2 flex-1 flex flex-col">
+                    {/* Badge Rak */}
+                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                      Lokasi: Rak {item.gate_code}
+                    </span>
+                    
+                    <h3 className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
+                    <p className="text-xs text-slate-400 font-mono mb-4">{item.sku}</p>
+                    
+                    <div className="mt-auto pt-3 border-t border-slate-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex flex-col">
+                          <span className="text-xs text-slate-500">Harga</span>
+                          <span className="text-sm font-black text-emerald-600">
+                            Rp {(item.price || 0).toLocaleString('id-ID')}
+                          </span>
+                        </div>
+                        <div className="flex flex-col text-right">
+                          <span className="text-xs text-slate-500">Stok</span>
+                          <span className={`text-sm font-black ${item.stock_quantity > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                            {item.stock_quantity > 0 ? `${item.stock_quantity}` : 'Habis'}
+                          </span>
+                        </div>
+                      </div>
+                      <button 
+                        onClick={() => addToCart(item)}
+                        disabled={item.stock_quantity === 0}
+                        className="w-full bg-slate-900 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-30 disabled:hover:bg-slate-900"
+                      >
+                        + Keranjang
+                      </button>
+                    </div>
+                  </div>
+                </div> /* <-- PERBAIKAN 1: Menambahkan div penutup di sini */
+              ))
+            )}
           </div>
         </div>
       </main>
@@ -287,18 +361,17 @@ function App() {
                   </div>
                 ))
               )}
-            </div>
+            </div> {/* <-- PERBAIKAN 2: Menutup div area scroll keranjang dengan benar */}
 
-            <div className="p-6 bg-slate-50 border-t border-slate-200 space-y-3">
-              <div className="bg-white rounded-2xl p-4 border border-slate-200">
-                <div className="flex justify-between items-center mb-2">
-                  <span className="text-slate-600 font-semibold">Subtotal</span>
-                  <span className="text-slate-800 font-bold">Rp {cartTotal.toLocaleString('id-ID')}</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                  <span className="text-lg font-black text-slate-800">Total Pembayaran</span>
-                  <span className="text-2xl font-black text-emerald-600">Rp {cartTotal.toLocaleString('id-ID')}</span>
-                </div>
+            {/* PERBAIKAN 3: Merapikan wrapper untuk subtotal & tombol checkout */}
+            <div className="p-6 bg-white border-t border-slate-200 mt-auto">
+              <div className="flex justify-between items-center mb-4">
+                <span className="text-slate-500 font-medium">Subtotal</span>
+                <span className="text-slate-800 font-bold">Rp {cartTotal.toLocaleString('id-ID')}</span>
+              </div>
+              <div className="flex justify-between items-center pt-4 border-t border-slate-100 mb-6">
+                <span className="text-lg font-black text-slate-800">Total Pembayaran</span>
+                <span className="text-2xl font-black text-emerald-600">Rp {cartTotal.toLocaleString('id-ID')}</span>
               </div>
               <button 
                 onClick={handleCheckout}
@@ -308,6 +381,7 @@ function App() {
                 Ambil Barang Sekarang
               </button>
             </div>
+
           </div>
         </div>
       )}
