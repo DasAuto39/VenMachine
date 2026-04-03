@@ -20,6 +20,17 @@ services:
       - ./backend:/app  # Sinkronisasi folder agar fitur --reload tetap jalan saat Anda edit kode
     depends_on:
       - db
+    env_file:
+      - .env
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./frontend:/app             # Sinkronisasi kode React Anda (Live Reload)
+      - /app/node_modules           # Trik ajaib agar node_modules lokal tidak bentrok dengan versi Linux Docker
+    depends_on:
+      - backend                     # Pastikan backend nyala dulu sebelum frontend
 
 volumes:
   pg_data:

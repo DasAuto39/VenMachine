@@ -1,11 +1,23 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 import asyncpg
+from fastapi.middleware.cors import CORSMiddleware
+import os
+
+# Mengambil DB_URL dari environment variable Docker.
+DB_URL = os.getenv("DB_URL")
 
 app = FastAPI(title="Smart Storage API")
 
-# Konfigurasi koneksi database in docker
-DB_URL = "postgresql://protel:protelAsem6@db:5432/venmachine_db"
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Mengizinkan React mengakses API ini
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 
 # Skema data (Pydantic Models) untuk Request Body
 class DispenseRequest(BaseModel):
@@ -31,7 +43,7 @@ async def get_items():
     async with app.state.pool.acquire() as connection:
         # Mengambil item yang stoknya masih tersedia
         query = """
-            SELECT i.id, i.name, i.sku, i.stock_quantity, s.gate_code 
+            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, s.gate_code 
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             WHERE i.stock_quantity > 0
