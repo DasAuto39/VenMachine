@@ -1,18 +1,22 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-import asyncpg
 from fastapi.middleware.cors import CORSMiddleware
-import os
-
-# Mengambil DB_URL dari environment variable Docker.
-DB_URL = os.getenv("DB_URL")
+from database import DatabasePool
+from queries import (
+    get_available_items,
+    dispense_item,
+    get_all_items,
+    create_item,
+    update_item,
+    delete_item,
+    get_transaction_logs
+)
 
 app = FastAPI(title="Smart Storage API")
 
-
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Mengizinkan React mengakses API ini
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -45,68 +49,23 @@ class ItemUpdate(BaseModel):
 # Mengelola koneksi database saat server menyala/mati
 @app.on_event("startup")
 async def startup():
-    app.state.pool = await asyncpg.create_pool(DB_URL)
+    await DatabasePool.init()
 
 @app.on_event("shutdown")
 async def shutdown():
-    await app.state.pool.close()
+    await DatabasePool.close()
 
 # Endpoint 1: Mengambil katalog barang untuk UI React
 @app.get("/api/items")
 async def get_items():
-    async with app.state.pool.acquire() as connection:
-        # Mengambil item yang stoknya masih tersedia
-        query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, s.gate_code 
-            FROM items i
-            LEFT JOIN storage_locations s ON i.location_id = s.id
-            WHERE i.stock_quantity > 0
-        """
-        rows = await connection.fetch(query)
-        return [dict(row) for row in rows]
+    """Get semua barang yang tersedia (stok > 0)"""
+    return await get_available_items()
 
 # Endpoint 2: Menerima request pengambilan barang (Dari UI atau LLM)
 @app.post("/api/dispense")
-async def dispense_item(req: DispenseRequest):
-    async with app.state.pool.acquire() as connection:
-        try:
-            # Cek stock tersedia
-            check_query = "SELECT stock_quantity FROM items WHERE id = $1"
-            item = await connection.fetchrow(check_query, req.item_id)
-            
-            if not item:
-                raise HTTPException(status_code=404, detail="Item not found")
-            
-            if item['stock_quantity'] < req.requested_qty:
-                raise HTTPException(status_code=400, detail="Stok tidak cukup")
-            
-            # Decrement stock
-            update_query = """
-                UPDATE items 
-                SET stock_quantity = stock_quantity - $1,
-                    updated_at = NOW()
-                WHERE id = $2
-                RETURNING id, name, stock_quantity
-            """
-            result = await connection.fetchrow(update_query, req.requested_qty, req.item_id)
-            
-            # Log transactionnya
-            log_query = """
-                INSERT INTO dispense_logs (item_id, requested_qty, source, status)
-                VALUES ($1, $2, 'WEB', 'SUCCESS')
-                RETURNING id
-            """
-            log_result = await connection.fetchrow(log_query, req.item_id, req.requested_qty)
-            
-            return {
-                "message": f"Berhasil ambil {req.requested_qty}x {result['name']}", 
-                "transaction_id": log_result['id'],
-                "new_stock": result['stock_quantity']
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Error: {str(e)}")
+async def dispense_item_endpoint(req: DispenseRequest):
+    """Decrement stock saat user checkout"""
+    return await dispense_item(req.item_id, req.requested_qty)
 
 # Endpoint 3: Webhook untuk menerima laporan dari Hardware
 @app.post("/api/hardware-status")
@@ -122,88 +81,36 @@ async def update_hardware_status(payload: HardwareStatus):
 
 # Endpoint 4: Get all items (admin - termasuk stok 0)
 @app.get("/api/admin/items")
-async def get_all_items():
-    async with app.state.pool.acquire() as connection:
-        query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.location_id, s.gate_code
-            FROM items i
-            LEFT JOIN storage_locations s ON i.location_id = s.id
-            ORDER BY i.id
-        """
-        rows = await connection.fetch(query)
-        return [dict(row) for row in rows]
+async def get_all_items_endpoint():
+    """Get all items including stock 0"""
+    return await get_all_items()
 
 # Endpoint 5: Create new item
 @app.post("/api/admin/items")
-async def create_item(item: ItemCreate):
-    async with app.state.pool.acquire() as connection:
-        try:
-            query = """
-                INSERT INTO items (name, sku, price, stock_quantity, location_id)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING id, name, sku, price, stock_quantity, location_id
-            """
-            result = await connection.fetchrow(query, item.name, item.sku, item.price, item.stock_quantity, item.location_id)
-            return dict(result)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+async def create_item_endpoint(item: ItemCreate):
+    """Create a new item"""
+    return await create_item(item.name, item.sku, item.price, item.stock_quantity, item.location_id)
 
 # Endpoint 6: Update item
 @app.put("/api/admin/items/{item_id}")
-async def update_item(item_id: int, item: ItemUpdate):
-    async with app.state.pool.acquire() as connection:
-        # Build dynamic update query
-        updates = []
-        values = []
-        counter = 1
-        
-        if item.name is not None:
-            updates.append(f"name = ${counter}")
-            values.append(item.name)
-            counter += 1
-        if item.sku is not None:
-            updates.append(f"sku = ${counter}")
-            values.append(item.sku)
-            counter += 1
-        if item.price is not None:
-            updates.append(f"price = ${counter}")
-            values.append(item.price)
-            counter += 1
-        if item.stock_quantity is not None:
-            updates.append(f"stock_quantity = ${counter}")
-            values.append(item.stock_quantity)
-            counter += 1
-        if item.location_id is not None:
-            updates.append(f"location_id = ${counter}")
-            values.append(item.location_id)
-            counter += 1
-        
-        if not updates:
-            raise HTTPException(status_code=400, detail="No fields to update")
-        
-        updates.append(f"updated_at = NOW()")
-        values.append(item_id)
-        
-        try:
-            query = f"""
-                UPDATE items
-                SET {', '.join(updates)}
-                WHERE id = ${counter}
-                RETURNING id, name, sku, price, stock_quantity, location_id
-            """
-            result = await connection.fetchrow(query, *values)
-            if not result:
-                raise HTTPException(status_code=404, detail="Item not found")
-            return dict(result)
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+async def update_item_endpoint(item_id: int, item: ItemUpdate):
+    """Update an item"""
+    update_kwargs = {}
+    if item.name is not None:
+        update_kwargs['name'] = item.name
+    if item.sku is not None:
+        update_kwargs['sku'] = item.sku
+    if item.price is not None:
+        update_kwargs['price'] = item.price
+    if item.stock_quantity is not None:
+        update_kwargs['stock_quantity'] = item.stock_quantity
+    if item.location_id is not None:
+        update_kwargs['location_id'] = item.location_id
+    
+    return await update_item(item_id, **update_kwargs)
 
 # Endpoint 7: Delete item
 @app.delete("/api/admin/items/{item_id}")
-async def delete_item(item_id: int):
-    async with app.state.pool.acquire() as connection:
-        query = "DELETE FROM items WHERE id = $1 RETURNING id"
-        result = await connection.fetchrow(query, item_id)
-        if not result:
-            raise HTTPException(status_code=404, detail="Item not found")
-        return {"message": "Item deleted successfully", "id": item_id}
+async def delete_item_endpoint(item_id: int):
+    """Delete an item"""
+    return await delete_item(item_id)
