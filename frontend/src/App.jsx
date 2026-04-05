@@ -9,32 +9,66 @@ function App() {
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [currentGate, setCurrentGate] = useState("unknown");
+  const [notification, setNotification] = useState(null); // For toast notifications
+
+  // Read gate from URL parameter
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const gateFromUrl = params.get('gate');
+    if (gateFromUrl) {
+      setCurrentGate(gateFromUrl);
+      localStorage.setItem('current_gate', gateFromUrl);
+      console.log('Gate detected:', gateFromUrl);
+    }
+  }, []);
 
   useEffect(() => {
-    fetch("http://127.0.0.1:8000/api/items")
+    fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items`)
       .then((res) => res.json())
       .then((data) => setItems(data))
       .catch((err) => console.error("Gagal mengambil data:", err));
   }, []);
 
+  // Helper function to format gate display
+  const formatGateDisplay = (gate) => {
+    if (gate === "unknown") return "Belum terhubung ke gate";
+    const gateNum = gate.replace(/\D/g, ''); // Extract number
+    return `Sekarang Anda Berada di gate ${gateNum}`;
+  };
+
   // Tambah item ke cart atau increment quantity jika sudah ada
   const addToCart = (item) => {
+    // Calculate new quantity based on current cart state
+    const currentQty = cart[item.id]?.qty || 0;
+    const newQty = currentQty + 1;
+    
+    // Update cart
     setCart(prevCart => {
       if (prevCart[item.id]) {
         return {
           ...prevCart,
           [item.id]: {
             ...prevCart[item.id],
-            qty: prevCart[item.id].qty + 1
+            qty: newQty
           }
         };
       } else {
         return {
           ...prevCart,
-          [item.id]: { item, qty: 1 }
+          [item.id]: { item, qty: newQty }
         };
       }
     });
+    
+    // Show notification with correct quantity
+    showNotification(`${item.name} dalam keranjang: ${newQty}`);
+  };
+
+  // Notification helper
+  const showNotification = (message) => {
+    setNotification(message);
+    setTimeout(() => setNotification(null), 3000);
   };
 
   // Increment quantity
@@ -106,10 +140,14 @@ function App() {
       for (const itemId in cart) {
         const { item, qty } = cart[itemId];
         try {
-          const res = await fetch("http://127.0.0.1:8000/api/dispense", {
+          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/dispense`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ item_id: item.id, requested_qty: qty })
+            body: JSON.stringify({ 
+              item_id: item.id, 
+              requested_qty: qty,
+              gate_code: currentGate
+            })
           });
 
           if (res.ok) {
@@ -126,19 +164,19 @@ function App() {
       }
 
       if (successCount > 0) {
-        let message = `✅ Transaksi Sukses! ${successCount} barang sedang disiapkan di rak.`;
+        let message = `Transaksi Sukses! ${successCount} barang sedang disiapkan di rak.\n${formatGateDisplay(currentGate)}`;
         if (failCount > 0) {
-          message += `\n⚠️ ${failCount} barang gagal diproses: ${errors.join(', ')}`;
+          message += `\n${failCount} barang gagal diproses: ${errors.join(', ')}`;
         }
         alert(message);
         setCart({});
         setIsCartOpen(false);
         // Refresh produk list untuk update harga
-        const resItems = await fetch("http://127.0.0.1:8000/api/items");
+        const resItems = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items`);
         const newItems = await resItems.json();
         setItems(newItems);
       } else {
-        alert(`❌ Semua barang gagal: ${errors.join(', ')}`);
+        alert(`Semua barang gagal: ${errors.join(', ')}`);
       }
     } catch (err) {
       console.error("Checkout error:", err);
@@ -198,32 +236,31 @@ function App() {
       {/* Content wrapper with relative positioning */}
       <div className="relative z-10">
       
-      {/* 1. NAVBAR (Glassmorphism Effect) */}
-      <header className="sticky top-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-4 flex items-center justify-between transition-all">
+      {/* Notification Toast */}
+      {notification && (
+        <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-lg font-semibold z-50 animate-bounce">
+          {notification}
+        </div>
+      )}
+      
+      {/* 1. NAVBAR (Glassmorphism Effect) - FIXED at top */}
+      <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-4 flex items-center justify-between transition-all">
+        {/* Logo and Gate */}
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black">
             F
           </div>
-          <span className="text-xl font-black tracking-tight text-slate-900">
-            FRESH<span className="text-emerald-500">MART</span>
-          </span>
-        </div>
-        
-        <div className="hidden md:block flex-1 max-w-2xl px-8">
-          <div className="relative group">
-            <input 
-              type="text" 
-              placeholder="Cari apel, beras, atau minyak..." 
-              className="w-full pl-12 pr-4 py-3 bg-slate-100/50 border border-slate-200 rounded-2xl outline-none text-sm transition-all focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <svg className="absolute left-4 top-3.5 w-5 h-5 opacity-50 group-focus-within:opacity-100 group-focus-within:text-emerald-500 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+          <div>
+            <span className="text-xl font-black tracking-tight text-slate-900">
+              FRESH<span className="text-emerald-500">MART</span>
+            </span>
+            <div className="text-xs text-emerald-600 font-semibold">
+              {formatGateDisplay(currentGate)}
+            </div>
           </div>
         </div>
 
+        {/* Cart Button */}
         <button 
           onClick={() => setIsCartOpen(true)}
           className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
@@ -250,6 +287,20 @@ function App() {
             <h1 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Belanja Cepat,<br/>Tanpa Antre Kasir.</h1>
             <p className="text-lg text-emerald-50 opacity-95 mx-auto">Pilih dari layar, bayar, dan ambil bahan makanan segar Anda langsung dari rak otomatis.</p>
           </div>
+        </div>
+
+        {/* Search Bar - Below Hero Banner, Full Width */}
+        <div className="relative group mb-10 max-w-2xl mx-auto w-full">
+          <input 
+            type="text" 
+            placeholder="Cari apel, beras, atau minyak..." 
+            className="w-full pl-12 pr-4 py-3 bg-slate-100/50 border border-slate-200 rounded-2xl outline-none text-sm transition-all focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <svg className="absolute left-4 top-3.5 w-5 h-5 opacity-50 group-focus-within:opacity-100 group-focus-within:text-emerald-500 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
         </div>
 
         {/* 3. KATEGORI */}

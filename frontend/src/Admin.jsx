@@ -21,7 +21,7 @@ function Admin() {
 
   const fetchItems = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/admin/items");
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
       const data = await res.json();
       setItems(data);
     } catch (err) {
@@ -31,7 +31,7 @@ function Admin() {
 
   const fetchLocations = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/api/admin/items");
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
       const data = await res.json();
       const uniqueLocations = [...new Set(data.map(item => item.location_id))].filter(Boolean);
       setLocations(uniqueLocations);
@@ -59,7 +59,7 @@ function Admin() {
     try {
       if (editingId) {
         // Update
-        const res = await fetch(`http://127.0.0.1:8000/api/admin/items/${editingId}`, {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
@@ -70,7 +70,7 @@ function Admin() {
         }
       } else {
         // Create
-        const res = await fetch("http://127.0.0.1:8000/api/admin/items", {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(formData)
@@ -104,7 +104,7 @@ function Admin() {
   const handleDelete = async (id) => {
     if (confirm("Yakin ingin menghapus produk ini?")) {
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/admin/items/${id}`, {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${id}`, {
           method: 'DELETE'
         });
         if (res.ok) {
