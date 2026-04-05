@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import ProductDetail from './ProductDetail';
 
 function App() {
   const [items, setItems] = useState([]);
@@ -6,6 +7,8 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [cart, setCart] = useState({}); // Ubah dari array ke object: {itemId: {item, qty}}
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [selectedProduct, setSelectedProduct] = useState(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   useEffect(() => {
     fetch("http://127.0.0.1:8000/api/items")
@@ -71,6 +74,25 @@ function App() {
       delete newCart[itemId];
       return newCart;
     });
+  };
+
+  // Buka product detail modal
+  const openProductDetail = (product) => {
+    setSelectedProduct(product);
+    setIsDetailOpen(true);
+  };
+
+  // Tutup product detail modal
+  const closeProductDetail = () => {
+    setIsDetailOpen(false);
+    setSelectedProduct(null);
+  };
+
+  // Add to cart dari detail modal
+  const addToCartFromDetail = () => {
+    if (selectedProduct) {
+      addToCart(selectedProduct);
+    }
   };
 
   const handleCheckout = async () => {
@@ -156,13 +178,31 @@ function App() {
   const categories = ["Semua", "Sayuran Segar", "Buah Pilihan", "Sembako", "Minuman", "Snack", "Daging"];
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-800 font-sans selection:bg-emerald-200">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50 text-slate-800 font-sans selection:bg-emerald-200 relative overflow-hidden">
+      
+      {/* Decorative Background Elements */}
+      <div className="fixed inset-0 pointer-events-none z-0">
+        {/* Large floating blob - top right */}
+        <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-emerald-200 rounded-full blur-3xl opacity-20 animate-float"></div>
+        
+        {/* Medium blob - bottom left */}
+        <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-80 h-80 bg-teal-200 rounded-full blur-3xl opacity-15 animate-float-reverse"></div>
+        
+        {/* Small blob - center right */}
+        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-emerald-300 rounded-full blur-3xl opacity-10 animate-float" style={{animationDelay: '1s'}}></div>
+        
+        {/* Grid pattern overlay */}
+        <div className="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:50px_50px]"></div>
+      </div>
+      
+      {/* Content wrapper with relative positioning */}
+      <div className="relative z-10">
       
       {/* 1. NAVBAR (Glassmorphism Effect) */}
       <header className="sticky top-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-4 flex items-center justify-between transition-all">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-emerald-500 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-xl">
-            🥬
+          <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black">
+            F
           </div>
           <span className="text-xl font-black tracking-tight text-slate-900">
             FRESH<span className="text-emerald-500">MART</span>
@@ -178,15 +218,17 @@ function App() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <span className="absolute left-4 top-3 text-xl opacity-50 group-focus-within:text-emerald-500 transition-colors">🔍</span>
+            <svg className="absolute left-4 top-3.5 w-5 h-5 opacity-50 group-focus-within:opacity-100 group-focus-within:text-emerald-500 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
           </div>
         </div>
 
         <button 
           onClick={() => setIsCartOpen(true)}
-          className="relative flex items-center gap-2 bg-white border border-slate-200 hover:border-emerald-300 px-5 py-2.5 rounded-2xl font-bold text-slate-700 hover:text-emerald-600 transition-all shadow-sm hover:shadow-md"
+          className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
         >
-          <span>Keranjang</span>
+          <span>🛒 Keranjang</span>
           {cartItemCount > 0 && (
             <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
               {cartItemCount}
@@ -198,33 +240,47 @@ function App() {
       <main className="max-w-7xl mx-auto px-6 py-8">
         
         {/* 2. HERO BANNER */}
-        <div className="relative overflow-hidden bg-emerald-600 rounded-3xl p-10 text-white mb-12 shadow-xl shadow-emerald-600/20">
-          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl"></div>
-          <div className="relative z-10 max-w-lg">
-            <span className="inline-block py-1 px-3 rounded-full bg-emerald-500/50 border border-emerald-400/50 text-xs font-bold tracking-wider mb-4 uppercase backdrop-blur-sm">
+        <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-3xl p-12 text-white mb-12 shadow-xl shadow-emerald-600/20">
+          <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl"></div>
+          <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-80 h-80 bg-teal-400 opacity-5 rounded-full blur-3xl"></div>
+          <div className="relative z-10 text-center max-w-3xl mx-auto">
+            <span className="inline-block py-2 px-4 rounded-full bg-white/10 border border-white/20 text-xs font-bold tracking-wider mb-6 uppercase backdrop-blur-sm">
               Supermarket Otomatis
             </span>
-            <h1 className="text-4xl md:text-5xl font-black mb-4 leading-tight">Belanja Cepat, <br/>Tanpa Antre Kasir.</h1>
-            <p className="text-emerald-50 text-lg opacity-90">Pilih dari layar, bayar, dan ambil bahan makanan segar Anda langsung dari rak otomatis.</p>
+            <h1 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Belanja Cepat,<br/>Tanpa Antre Kasir.</h1>
+            <p className="text-lg text-emerald-50 opacity-95 mx-auto">Pilih dari layar, bayar, dan ambil bahan makanan segar Anda langsung dari rak otomatis.</p>
           </div>
         </div>
 
         {/* 3. KATEGORI */}
         <div className="mb-10">
           <div className="flex gap-4 overflow-x-auto pb-4 hide-scrollbar">
-            {categories.map((cat, idx) => (
-              <button 
-                key={idx} 
-                onClick={() => setSelectedCategory(cat)}
-                className={`shrink-0 px-6 py-3 font-semibold rounded-2xl transition-all ${
-                  selectedCategory === cat
-                    ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:text-emerald-600 hover:border-emerald-300 hover:shadow-md hover:-translate-y-1'
-                }`}
-              >
-                {cat}
-              </button>
-            ))}
+            {categories.map((cat, idx) => {
+              const colors = [
+                'from-emerald-500 to-teal-600',
+                'from-blue-500 to-cyan-600',
+                'from-purple-500 to-pink-600',
+                'from-orange-500 to-rose-600',
+                'from-indigo-500 to-blue-600',
+                'from-lime-500 to-emerald-600',
+              ];
+              const colorClass = colors[idx % colors.length];
+              const isSelected = selectedCategory === cat;
+              
+              return (
+                <button 
+                  key={idx} 
+                  onClick={() => setSelectedCategory(cat)}
+                  className={`shrink-0 px-6 py-3 font-semibold rounded-2xl transition-all ${
+                    isSelected
+                      ? `bg-gradient-to-r ${colorClass} text-white shadow-lg shadow-emerald-500/30`
+                      : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:shadow-md hover:-translate-y-1'
+                  }`}
+                >
+                  {cat}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -242,21 +298,42 @@ function App() {
               </div>
             ) : (
               filteredItems.map((item) => (
-                <div key={item.id} className="bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group">
+                <div 
+                  key={item.id} 
+                  className="bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group cursor-pointer"
+                  onClick={() => openProductDetail(item)}
+                  title={item.description || item.name}
+                >
                   
-                  {/* Kotak Gambar Presisi */}
-                  <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors">
-                    🛒
+                  {/* Kotak Gambar dengan Fallback Emoji */}
+                  <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden">
+                    {item.image_url ? (
+                      <img 
+                        src={item.image_url} 
+                        alt={item.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.nextSibling.style.display = 'flex';
+                        }}
+                      />
+                    ) : null}
+                    <span 
+                      className={item.image_url ? "hidden" : "flex"}
+                      style={{width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center'}}
+                    >
+                      🛒
+                    </span>
                   </div>
                   
                   <div className="px-2 flex-1 flex flex-col">
-                    {/* Badge Rak */}
-                    <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
-                      Lokasi: Rak {item.gate_code}
-                    </span>
-                    
                     <h3 className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
                     <p className="text-xs text-slate-400 font-mono mb-4">{item.sku}</p>
+                    
+                    {/* Deskripsi singkat */}
+                    {item.description && (
+                      <p className="text-xs text-slate-500 line-clamp-2 mb-2 italic">{item.description}</p>
+                    )}
                     
                     <div className="mt-auto pt-3 border-t border-slate-100">
                       <div className="flex items-center justify-between mb-3">
@@ -274,7 +351,10 @@ function App() {
                         </div>
                       </div>
                       <button 
-                        onClick={() => addToCart(item)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToCart(item);
+                        }}
                         disabled={item.stock_quantity === 0}
                         className="w-full bg-slate-900 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-30 disabled:hover:bg-slate-900"
                       >
@@ -282,7 +362,7 @@ function App() {
                       </button>
                     </div>
                   </div>
-                </div> /* <-- PERBAIKAN 1: Menambahkan div penutup di sini */
+                </div>
               ))
             )}
           </div>
@@ -385,6 +465,17 @@ function App() {
           </div>
         </div>
       )}
+
+      {/* Product Detail Modal */}
+      <ProductDetail 
+        product={selectedProduct}
+        isOpen={isDetailOpen}
+        onClose={closeProductDetail}
+        onAddToCart={addToCartFromDetail}
+      />
+
+      </div>
+      {/* End of relative z-10 wrapper */}
 
     </div>
   );

@@ -16,7 +16,7 @@ async def get_available_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, s.gate_code 
+            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, s.gate_code 
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             WHERE i.stock_quantity > 0
@@ -95,7 +95,7 @@ async def get_all_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.location_id, s.gate_code
+            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, i.location_id, s.gate_code
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             ORDER BY i.id
@@ -104,7 +104,7 @@ async def get_all_items() -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-async def create_item(name: str, sku: str, price: float, stock_quantity: int, location_id: int) -> Dict:
+async def create_item(name: str, sku: str, price: float, stock_quantity: int, location_id: int, description: str = None, image_url: str = None) -> Dict:
     """
     Tambah produk baru
     Security: Parameterized query, input validation
@@ -120,16 +120,20 @@ async def create_item(name: str, sku: str, price: float, stock_quantity: int, lo
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     if stock_quantity < 0:
         raise HTTPException(status_code=400, detail="Stock cannot be negative")
+    if description and len(description) > 500:
+        raise HTTPException(status_code=400, detail="Description too long (max 500 chars)")
+    if image_url and len(image_url) > 500:
+        raise HTTPException(status_code=400, detail="Image URL too long (max 500 chars)")
     
     async with pool.acquire() as connection:
         try:
             result = await connection.fetchrow(
                 """
-                INSERT INTO items (name, sku, price, stock_quantity, location_id)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING id, name, sku, price, stock_quantity, location_id
+                INSERT INTO items (name, sku, price, stock_quantity, location_id, description, image_url)
+                VALUES ($1, $2, $3, $4, $5, $6, $7)
+                RETURNING id, name, sku, price, stock_quantity, location_id, description, image_url
                 """,
-                name, sku, price, stock_quantity, location_id
+                name, sku, price, stock_quantity, location_id, description, image_url
             )
             return dict(result)
         except asyncpg.UniqueViolationError:
@@ -146,7 +150,7 @@ async def update_item(item_id: int, **kwargs) -> Dict:
     pool = DatabasePool.get_pool()
     
     # Whitelist fields yang boleh di-update
-    allowed_fields = {'name', 'sku', 'price', 'stock_quantity', 'location_id'}
+    allowed_fields = {'name', 'sku', 'price', 'stock_quantity', 'location_id', 'description', 'image_url'}
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields and v is not None}
     
     if not updates:
@@ -161,6 +165,10 @@ async def update_item(item_id: int, **kwargs) -> Dict:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
     if 'stock_quantity' in updates and updates['stock_quantity'] < 0:
         raise HTTPException(status_code=400, detail="Stock cannot be negative")
+    if 'description' in updates and len(updates.get('description', '')) > 500:
+        raise HTTPException(status_code=400, detail="Description too long (max 500 chars)")
+    if 'image_url' in updates and len(updates.get('image_url', '')) > 500:
+        raise HTTPException(status_code=400, detail="Image URL too long (max 500 chars)")
     
     # Build parameterized query properly
     set_clauses = []
@@ -182,7 +190,7 @@ async def update_item(item_id: int, **kwargs) -> Dict:
                 UPDATE items
                 SET {', '.join(set_clauses)}
                 WHERE id = ${counter}
-                RETURNING id, name, sku, price, stock_quantity, location_id
+                RETURNING id, name, sku, price, stock_quantity, location_id, description, image_url
             """
             
             result = await connection.fetchrow(query, *values)

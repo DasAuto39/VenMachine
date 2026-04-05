@@ -32,6 +32,7 @@ frontend/node_modules/
 backend/__pycache__/
 backend/init_db.py
 backend/db.sql
+IMAGE_SETUP_GUIDE.md
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

@@ -38,6 +38,8 @@ class ItemCreate(BaseModel):
     price: float
     stock_quantity: int
     location_id: int
+    description: str = None
+    image_url: str = None
 
 class ItemUpdate(BaseModel):
     name: str = None
@@ -45,6 +47,8 @@ class ItemUpdate(BaseModel):
     price: float = None
     stock_quantity: int = None
     location_id: int = None
+    description: str = None
+    image_url: str = None
 
 # Mengelola koneksi database saat server menyala/mati
 @app.on_event("startup")
@@ -89,7 +93,7 @@ async def get_all_items_endpoint():
 @app.post("/api/admin/items")
 async def create_item_endpoint(item: ItemCreate):
     """Create a new item"""
-    return await create_item(item.name, item.sku, item.price, item.stock_quantity, item.location_id)
+    return await create_item(item.name, item.sku, item.price, item.stock_quantity, item.location_id, item.description, item.image_url)
 
 # Endpoint 6: Update item
 @app.put("/api/admin/items/{item_id}")
@@ -106,6 +110,10 @@ async def update_item_endpoint(item_id: int, item: ItemUpdate):
         update_kwargs['stock_quantity'] = item.stock_quantity
     if item.location_id is not None:
         update_kwargs['location_id'] = item.location_id
+    if item.description is not None:
+        update_kwargs['description'] = item.description
+    if item.image_url is not None:
+        update_kwargs['image_url'] = item.image_url
     
     return await update_item(item_id, **update_kwargs)
 
