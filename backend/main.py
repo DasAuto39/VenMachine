@@ -9,7 +9,11 @@ from queries import (
     create_item,
     update_item,
     delete_item,
-    get_transaction_logs
+    get_transaction_logs,
+    create_transaction,
+    process_payment,
+    get_transaction_status,
+    get_all_transactions
 )
 
 app = FastAPI(title="Smart Storage API")
@@ -31,6 +35,14 @@ class DispenseRequest(BaseModel):
 class HardwareStatus(BaseModel):
     transaction_id: int
     status: str  # "SUCCESS" atau "FAILED"
+
+class CheckoutRequest(BaseModel):
+    gate_id: int
+    items_cart: dict  # {item_id: {item, qty}}
+
+class PaymentRequest(BaseModel):
+    transaction_id: int
+    payment_method: str  # CASH, QRIS, TRANSFER, CARD
 
 class ItemCreate(BaseModel):
     name: str
@@ -64,6 +76,26 @@ async def shutdown():
 async def get_items():
     """Get semua barang yang tersedia (stok > 0)"""
     return await get_available_items()
+
+# ===== PAYMENT GATEWAY ENDPOINTS =====
+
+# Endpoint 1: Create transaction (step 1 - customer checkout)
+@app.post("/api/checkout")
+async def checkout_endpoint(req: CheckoutRequest):
+    """Create transaction - customer siap bayar"""
+    return await create_transaction(req.gate_id, req.items_cart)
+
+# Endpoint 2: Process payment (step 2 - customer bayar)
+@app.post("/api/payment")
+async def process_payment_endpoint(req: PaymentRequest):
+    """Process payment untuk transaction"""
+    return await process_payment(req.transaction_id, req.payment_method)
+
+# Endpoint 3: Get transaction status
+@app.get("/api/transaction/{transaction_id}")
+async def get_transaction_status_endpoint(transaction_id: int):
+    """Get transaction and payment status"""
+    return await get_transaction_status(transaction_id)
 
 # Endpoint 2: Menerima request pengambilan barang (Dari UI atau LLM)
 @app.post("/api/dispense")
@@ -122,3 +154,11 @@ async def update_item_endpoint(item_id: int, item: ItemUpdate):
 async def delete_item_endpoint(item_id: int):
     """Delete an item"""
     return await delete_item(item_id)
+
+# ===== ADMIN PAYMENT MANAGEMENT ENDPOINTS =====
+
+# Endpoint: Get all transactions
+@app.get("/api/admin/transactions")
+async def get_transactions_endpoint(limit: int = 50):
+    """Get all transactions (Admin view)"""
+    return await get_all_transactions(limit)

@@ -5,6 +5,213 @@ from database import DatabasePool
 from fastapi import HTTPException
 from typing import List, Dict, Optional
 import asyncpg
+from datetime import datetime, timedelta
+
+# ===== PAYMENT MANAGEMENT (Demo Payment Gateway) =====
+
+async def create_transaction(gate_id: int, items_cart: Dict[int, Dict]) -> Dict:
+    """
+    Buat transaction baru ketika customer siap checkout
+    Security: Parameterized query, input validation
+    """
+    if gate_id not in [1, 2, 3]:
+        raise HTTPException(status_code=400, detail="Invalid gate_id")
+    
+    # Calculate total amount
+    total_amount = 0
+    for item_id, cart_item in items_cart.items():
+        total_amount += cart_item['item']['price'] * cart_item['qty']
+    
+    if total_amount <= 0:
+        raise HTTPException(status_code=400, detail="Invalid total amount")
+    
+    pool = DatabasePool.get_pool()
+    
+    # Generate transaction code: TRX-GATE1-20260412-001234
+    timestamp = datetime.utcnow().strftime("%Y%m%d%H%M%S")
+    transaction_code = f"TRX-GATE{gate_id}-{timestamp}"
+    
+    async with pool.acquire() as connection:
+        try:
+            # Create transaction (PENDING until payment)
+            expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 min to pay
+            
+            result = await connection.fetchrow(
+                """
+                INSERT INTO transactions (transaction_code, gate_id, total_amount, payment_status, expired_at)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, transaction_code, gate_id, total_amount, payment_status, created_at, expired_at
+                """,
+                transaction_code, gate_id, total_amount, 'PENDING', expires_at
+            )
+            
+            return {
+                "transaction_id": result['id'],
+                "transaction_code": result['transaction_code'],
+                "gate_id": result['gate_id'],
+                "total_amount": float(result['total_amount']),
+                "payment_status": result['payment_status'],
+                "created_at": result['created_at'].isoformat(),
+                "expires_at": result['expired_at'].isoformat()
+            }
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+async def process_payment(transaction_id: int, payment_method: str) -> Dict:
+    """
+    Process payment (DEMO - simulate payment gateway)
+    Security: Parameterized query, payment method validation
+    """
+    pool = DatabasePool.get_pool()
+    
+    # Validate payment method
+    valid_methods = ['CASH', 'QRIS', 'TRANSFER', 'CARD']
+    if payment_method not in valid_methods:
+        raise HTTPException(status_code=400, detail=f"Invalid payment method. Choose from: {', '.join(valid_methods)}")
+    
+    async with pool.acquire() as connection:
+        try:
+            # Check transaction exists and not expired
+            transaction = await connection.fetchrow(
+                "SELECT id, total_amount, payment_status, expired_at FROM transactions WHERE id = $1",
+                transaction_id
+            )
+            
+            if not transaction:
+                raise HTTPException(status_code=404, detail="Transaction not found")
+            
+            if transaction['payment_status'] != 'PENDING':
+                raise HTTPException(status_code=400, detail=f"Transaction already {transaction['payment_status'].lower()}")
+            
+            if transaction['expired_at'] < datetime.utcnow():
+                # Mark as expired
+                await connection.execute(
+                    "UPDATE transactions SET payment_status = $1 WHERE id = $2",
+                    'CANCELLED', transaction_id
+                )
+                raise HTTPException(status_code=400, detail="Payment window expired (10 minutes)")
+            
+            # DEMO: Simulate successful payment (90% success rate)
+            import random
+            is_success = random.random() < 0.9
+            
+            payment_code = f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+            payment_status = 'SUCCESS' if is_success else 'FAILED'
+            
+            # Create payment record
+            payment = await connection.fetchrow(
+                """
+                INSERT INTO payments (transaction_id, payment_method, payment_code, status, paid_at)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, payment_code, status
+                """,
+                transaction_id, payment_method, payment_code, payment_status, 
+                datetime.utcnow() if is_success else None
+            )
+            
+            # Update transaction status
+            if is_success:
+                await connection.execute(
+                    """
+                    UPDATE transactions 
+                    SET payment_status = $1, paid_at = NOW()
+                    WHERE id = $2
+                    """,
+                    'PAID', transaction_id
+                )
+            
+            return {
+                "payment_id": payment['id'],
+                "payment_code": payment['payment_code'],
+                "status": payment_status,
+                "message": "Pembayaran berhasil!" if is_success else "Pembayaran gagal, silahkan coba lagi"
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+async def get_transaction_status(transaction_id: int) -> Dict:
+    """
+    Get transaction and payment status
+    Security: Parameterized query, read-only
+    """
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        transaction = await connection.fetchrow(
+            """
+            SELECT id, transaction_code, gate_id, total_amount, payment_status, created_at, paid_at, expired_at
+            FROM transactions
+            WHERE id = $1
+            """,
+            transaction_id
+        )
+        
+        if not transaction:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+        
+        # Get payment details if exists
+        payment = await connection.fetchrow(
+            """
+            SELECT id, payment_method, payment_code, status, paid_at
+            FROM payments
+            WHERE transaction_id = $1
+            """,
+            transaction_id
+        )
+        
+        return {
+            "transaction_id": transaction['id'],
+            "transaction_code": transaction['transaction_code'],
+            "gate_id": transaction['gate_id'],
+            "total_amount": float(transaction['total_amount']),
+            "payment_status": transaction['payment_status'],
+            "payment_method": payment['payment_method'] if payment else None,
+            "payment_code": payment['payment_code'] if payment else None,
+            "paid_at": payment['paid_at'].isoformat() if payment and payment['paid_at'] else None,
+            "created_at": transaction['created_at'].isoformat(),
+            "expired_at": transaction['expired_at'].isoformat()
+        }
+
+
+async def get_all_transactions(limit: int = 50) -> List[Dict]:
+    """
+    Get semua transactions (Admin view)
+    Security: Parameterized query, limited result set
+    """
+    if limit < 1 or limit > 1000:
+        limit = 50
+    
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        query = """
+            SELECT t.id, t.transaction_code, t.gate_id, t.total_amount, t.payment_status, t.created_at, t.paid_at,
+                   p.payment_method, p.payment_code
+            FROM transactions t
+            LEFT JOIN payments p ON t.id = p.transaction_id
+            ORDER BY t.created_at DESC
+            LIMIT $1
+        """
+        rows = await connection.fetch(query, limit)
+        
+        result = []
+        for row in rows:
+            result.append({
+                "transaction_id": row['id'],
+                "transaction_code": row['transaction_code'],
+                "gate_id": row['gate_id'],
+                "total_amount": float(row['total_amount']),
+                "payment_status": row['payment_status'],
+                "payment_method": row['payment_method'],
+                "payment_code": row['payment_code'],
+                "created_at": row['created_at'].isoformat(),
+                "paid_at": row['paid_at'].isoformat() if row['paid_at'] else None
+            })
+        
+        return result
+
 
 # ===== PUBLIC QUERIES (User Shopping) =====
 
@@ -16,7 +223,7 @@ async def get_available_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, s.gate_code 
+            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, s.row_position, s.location_code 
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             WHERE i.stock_quantity > 0
@@ -95,7 +302,7 @@ async def get_all_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, i.location_id, s.gate_code
+            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, i.location_id, s.row_position, s.location_code
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             ORDER BY i.id

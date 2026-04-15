@@ -11,6 +11,13 @@ function App() {
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [currentGate, setCurrentGate] = useState("unknown");
   const [notification, setNotification] = useState(null); // For toast notifications
+  
+  // Payment flow states
+  const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [transactionId, setTransactionId] = useState(null);
+  const [paymentMethod, setPaymentMethod] = useState("QRIS");
+  const [paymentStatus, setPaymentStatus] = useState(null); // null, 'success', 'failed'
 
   // Read gate from URL parameter
   useEffect(() => {
@@ -29,6 +36,17 @@ function App() {
       .then((data) => setItems(data))
       .catch((err) => console.error("Gagal mengambil data:", err));
   }, []);
+
+  // Function to fetch items (reusable)
+  const fetchItems = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items`);
+      const data = await res.json();
+      setItems(data);
+    } catch (err) {
+      console.error('Error fetching items:', err);
+    }
+  };
 
   // Helper function to format gate display
   const formatGateDisplay = (gate) => {
@@ -132,55 +150,106 @@ function App() {
   const handleCheckout = async () => {
     if (Object.keys(cart).length === 0) return;
     
+    setIsProcessing(true);
+    
     try {
-      let successCount = 0;
-      let failCount = 0;
-      const errors = [];
+      // Step 1: Create transaction
+      const gateNum = currentGate.replace(/\D/g, '') || '1';
+      
+      const checkoutRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/checkout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          gate_id: parseInt(gateNum),
+          items_cart: cart
+        })
+      });
 
-      for (const itemId in cart) {
-        const { item, qty } = cart[itemId];
-        try {
-          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/dispense`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ 
-              item_id: item.id, 
-              requested_qty: qty,
-              gate_code: currentGate
-            })
-          });
-
-          if (res.ok) {
-            successCount += qty;
-          } else {
-            const errData = await res.json();
-            failCount += qty;
-            errors.push(`${item.name}: ${errData.detail}`);
-          }
-        } catch (err) {
-          failCount += qty;
-          errors.push(`${item.name}: Network error`);
-        }
+      if (!checkoutRes.ok) {
+        const error = await checkoutRes.json();
+        throw new Error(error.detail || 'Gagal membuat transaksi');
       }
 
-      if (successCount > 0) {
-        let message = `Transaksi Sukses! ${successCount} barang sedang disiapkan di rak.\n${formatGateDisplay(currentGate)}`;
-        if (failCount > 0) {
-          message += `\n${failCount} barang gagal diproses: ${errors.join(', ')}`;
-        }
-        alert(message);
-        setCart({});
-        setIsCartOpen(false);
-        // Refresh produk list untuk update harga
-        const resItems = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items`);
-        const newItems = await resItems.json();
-        setItems(newItems);
-      } else {
-        alert(`Semua barang gagal: ${errors.join(', ')}`);
-      }
+      const transactionData = await checkoutRes.json();
+      setTransactionId(transactionData.transaction_id);
+      setIsPaymentModalOpen(true);
+      setIsProcessing(false);
+      setIsCartOpen(false);
+      
+      console.log('✅ Transaction created:', transactionData);
     } catch (err) {
       console.error("Checkout error:", err);
-      alert("Terjadi kesalahan saat checkout!");
+      showNotification(`❌ Error: ${err.message}`);
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePayment = async () => {
+    if (!transactionId) return;
+    
+    setIsProcessing(true);
+    
+    try {
+      // Step 2: Process payment
+      const paymentRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/payment`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transaction_id: transactionId,
+          payment_method: paymentMethod
+        })
+      });
+
+      const paymentData = await paymentRes.json();
+      
+      if (paymentData.status === 'SUCCESS') {
+        setPaymentStatus('success');
+        showNotification('✅ Pembayaran berhasil! Ambil barang Anda.');
+        
+        // Clear cart and close modal after success
+        setTimeout(() => {
+          setCart({});
+          setIsPaymentModalOpen(false);
+          setPaymentStatus(null);
+          setTransactionId(null);
+          setIsProcessing(false);
+          
+          // Dispense items (trigger hardware)
+          dispenseItems();
+          
+          // Refresh items
+          fetchItems();
+        }, 2000);
+      } else {
+        setPaymentStatus('failed');
+        showNotification('❌ Pembayaran gagal! Silahkan coba lagi.');
+        setIsProcessing(false);
+      }
+      
+      console.log('💳 Payment response:', paymentData);
+    } catch (err) {
+      console.error("Payment error:", err);
+      setPaymentStatus('failed');
+      showNotification(`❌ Error pembayaran: ${err.message}`);
+      setIsProcessing(false);
+    }
+  };
+
+  const dispenseItems = async () => {
+    try {
+      for (const itemId in cart) {
+        const { qty } = cart[itemId];
+        await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/dispense`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            item_id: parseInt(itemId), 
+            requested_qty: qty
+          })
+        });
+      }
+    } catch (err) {
+      console.error("Dispense error:", err);
     }
   };
 
@@ -274,7 +343,7 @@ function App() {
         </button>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-8">
+      <main className="max-w-7xl mx-auto px-6 py-8 pt-28">
         
         {/* 2. HERO BANNER */}
         <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-3xl p-12 text-white mb-12 shadow-xl shadow-emerald-600/20">
@@ -509,10 +578,100 @@ function App() {
                 disabled={cartItemCount === 0}
                 className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl disabled:bg-slate-300 disabled:text-slate-500 transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none text-lg active:scale-[0.98]"
               >
-                Ambil Barang Sekarang
+                {isProcessing ? '⏳ Memproses...' : '💳 Lanjut ke Pembayaran'}
               </button>
             </div>
 
+          </div>
+        </div>
+      )}
+
+      {/* PAYMENT MODAL */}
+      {isPaymentModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          {/* Overlay Gelap */}
+          <div 
+            className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" 
+            onClick={() => !isProcessing && setIsPaymentModalOpen(false)}
+          ></div>
+          
+          {/* Modal Panel */}
+          <div className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4">
+            <h2 className="text-2xl font-black mb-6 text-center">💳 Pilih Metode Pembayaran</h2>
+            
+            {paymentStatus === 'success' && (
+              <div className="text-center py-8">
+                <p className="text-6xl mb-4 animate-bounce">✅</p>
+                <h3 className="text-xl font-black text-emerald-600 mb-2">Pembayaran Berhasil!</h3>
+                <p className="text-slate-600">Silahkan ambil barang Anda dari mesin</p>
+              </div>
+            )}
+            
+            {paymentStatus === 'failed' && (
+              <div className="text-center py-8">
+                <p className="text-6xl mb-4">❌</p>
+                <h3 className="text-xl font-black text-red-600 mb-2">Pembayaran Gagal</h3>
+                <p className="text-slate-600 mb-6">Silahkan coba metode pembayaran lain</p>
+                <button 
+                  onClick={() => setPaymentStatus(null)}
+                  className="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-all"
+                >
+                  Kembali
+                </button>
+              </div>
+            )}
+            
+            {!paymentStatus && (
+              <>
+                <div className="space-y-3 mb-6">
+                  {[
+                    { value: 'QRIS', label: '📱 QRIS', desc: 'Scan QR Code' },
+                    { value: 'TRANSFER', label: '🏦 Transfer Bank', desc: 'Transfer ATM/Mobile Banking' },
+                    { value: 'CARD', label: '💳 Kartu Kredit', desc: 'Visa, Mastercard, dll' },
+                    { value: 'CASH', label: '💵 Tunai', desc: 'Bayar dengan uang tunai' },
+                  ].map(method => (
+                    <button
+                      key={method.value}
+                      onClick={() => setPaymentMethod(method.value)}
+                      className={`w-full p-4 rounded-2xl font-bold border-2 transition-all text-left ${
+                        paymentMethod === method.value
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span>{method.label}</span>
+                        {paymentMethod === method.value && <span className="text-lg">✓</span>}
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">{method.desc}</p>
+                    </button>
+                  ))}
+                </div>
+                
+                <div className="space-y-3">
+                  <button 
+                    onClick={handlePayment}
+                    disabled={isProcessing}
+                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold text-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30"
+                  >
+                    {isProcessing ? '⏳ Memproses...' : '✓ Bayar Sekarang'}
+                  </button>
+                  
+                  <button 
+                    onClick={() => {
+                      setIsPaymentModalOpen(false);
+                      setTransactionId(null);
+                      setPaymentStatus(null);
+                      setIsCartOpen(true);
+                    }}
+                    disabled={isProcessing}
+                    className="w-full py-3 border-2 border-slate-300 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all disabled:opacity-50"
+                  >
+                    Batal
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

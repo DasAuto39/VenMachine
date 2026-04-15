@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 
 function Admin() {
   const [items, setItems] = useState([]);
-  const [locations, setLocations] = useState([]);
+  const [transactions, setTransactions] = useState([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [activeTab, setActiveTab] = useState('products'); // 'products' or 'transactions'
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -13,30 +14,23 @@ function Admin() {
     location_id: ''
   });
 
-  // Fetch all items
+  // Fetch all items and transactions
   useEffect(() => {
     fetchItems();
-    fetchLocations();
+    fetchTransactions();
+    
+    // Refresh transactions every 10 seconds
+    const interval = setInterval(fetchTransactions, 10000);
+    return () => clearInterval(interval);
   }, []);
 
-  const fetchItems = async () => {
+  const fetchTransactions = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/transactions`);
       const data = await res.json();
-      setItems(data);
+      setTransactions(data);
     } catch (err) {
-      console.error("Error fetching items:", err);
-    }
-  };
-
-  const fetchLocations = async () => {
-    try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
-      const data = await res.json();
-      const uniqueLocations = [...new Set(data.map(item => item.location_id))].filter(Boolean);
-      setLocations(uniqueLocations);
-    } catch (err) {
-      console.error("Error fetching locations:", err);
+      console.error("Error fetching transactions:", err);
     }
   };
 
@@ -127,8 +121,8 @@ function Admin() {
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center">
-          <h1 className="text-2xl font-black text-slate-900">📦 Admin Panel - Manajemen Produk</h1>
+        <div className="max-w-7xl mx-auto flex justify-between items-center mb-4">
+          <h1 className="text-2xl font-black text-slate-900">Admin Panel</h1>
           <a 
             href="/user"
             className="px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors"
@@ -136,9 +130,37 @@ function Admin() {
             ← Kembali ke Belanja
           </a>
         </div>
+        
+        {/* Tabs */}
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveTab('products')}
+            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+              activeTab === 'products'
+                ? 'bg-emerald-500 text-white'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            Manajemen Produk
+          </button>
+          <button
+            onClick={() => setActiveTab('transactions')}
+            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+              activeTab === 'transactions'
+                ? 'bg-blue-500 text-white'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            Riwayat Pembayaran ({transactions.length})
+          </button>
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
+        
+        {/* PRODUCTS TAB */}
+        {activeTab === 'products' && (
+          <>
         
         {/* Add Button */}
         <button
@@ -270,7 +292,7 @@ function Admin() {
                       </span>
                     </td>
                     <td className="px-6 py-4 text-center text-slate-600 font-semibold">
-                      {item.gate_code || '-'}
+                      {item.location_code || '-'}
                     </td>
                     <td className="px-6 py-4 text-center space-x-2">
                       <button
@@ -319,6 +341,91 @@ function Admin() {
             </p>
           </div>
         </div>
+          </>
+        )}
+
+        {/* TRANSACTIONS TAB */}
+        {activeTab === 'transactions' && (
+          <div>
+            <h2 className="text-2xl font-black text-slate-900 mb-6">Riwayat Pembayaran</h2>
+            
+            {transactions.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
+                <p className="text-slate-600 text-lg">Belum ada transaksi</p>
+              </div>
+            ) : (
+              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="bg-slate-100 border-b border-slate-200">
+                        <th className="px-6 py-4 text-left font-bold text-slate-700">ID Transaksi</th>
+                        <th className="px-6 py-4 text-left font-bold text-slate-700">Gate</th>
+                        <th className="px-6 py-4 text-right font-bold text-slate-700">Jumlah</th>
+                        <th className="px-6 py-4 text-left font-bold text-slate-700">Metode Bayar</th>
+                        <th className="px-6 py-4 text-left font-bold text-slate-700">Status</th>
+                        <th className="px-6 py-4 text-left font-bold text-slate-700">Waktu</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.map((tx) => (
+                        <tr key={tx.transaction_id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-slate-700 font-mono text-sm">{tx.transaction_code}</td>
+                          <td className="px-6 py-4 text-slate-700 font-semibold">Gate {tx.gate_id}</td>
+                          <td className="px-6 py-4 text-right text-emerald-600 font-bold">
+                            Rp {(tx.total_amount || 0).toLocaleString('id-ID')}
+                          </td>
+                          <td className="px-6 py-4 text-slate-600">
+                            {tx.payment_method || '-'}
+                          </td>
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                              tx.payment_status === 'PAID' 
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : tx.payment_status === 'PENDING'
+                                ? 'bg-yellow-100 text-yellow-700'
+                                : 'bg-red-100 text-red-700'
+                            }`}>
+                              {tx.payment_status === 'PAID' ? '✅ Dibayar' : 
+                               tx.payment_status === 'PENDING' ? '⏳ Menunggu' : 
+                               '❌ Dibatalkan'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-600 text-sm">
+                            {new Date(tx.created_at).toLocaleString('id-ID')}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+              <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
+                <p className="text-blue-600 font-semibold mb-2">Total Transaksi</p>
+                <p className="text-3xl font-black text-blue-700">{transactions.length}</p>
+              </div>
+              <div className="bg-emerald-50 rounded-2xl p-6 border-2 border-emerald-200">
+                <p className="text-emerald-600 font-semibold mb-2">Pembayaran Sukses</p>
+                <p className="text-3xl font-black text-emerald-700">
+                  {transactions.filter(tx => tx.payment_status === 'PAID').length}
+                </p>
+              </div>
+              <div className="bg-amber-50 rounded-2xl p-6 border-2 border-amber-200">
+                <p className="text-amber-600 font-semibold mb-2">Total Pendapatan</p>
+                <p className="text-3xl font-black text-amber-700">
+                  Rp {transactions
+                    .filter(tx => tx.payment_status === 'PAID')
+                    .reduce((sum, tx) => sum + (tx.total_amount || 0), 0)
+                    .toLocaleString('id-ID')}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );
