@@ -4,11 +4,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import './index.css'
 import App from './App.jsx'
 import Admin from './Admin.jsx'
+import Login from './Login.jsx'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
     <BrowserRouter>
       <Routes>
+        <Route path="/login" element={<Login />} />
         <Route path="/user" element={<App />} />
         <Route path="/admin" element={<Admin />} />
         <Route path="/" element={<Navigate to="/user" replace />} />

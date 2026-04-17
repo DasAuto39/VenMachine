@@ -1,7 +1,13 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import ProductDetail from './ProductDetail';
 
-function App() {
+function App({ onGoToAdmin, onGoToLogin }) {
+  const navigate = useNavigate();
+  
+  // Optional authentication
+  const [user, setUser] = useState(null);
+  
   const [items, setItems] = useState([]);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Semua");
@@ -27,6 +33,22 @@ function App() {
       setCurrentGate(gateFromUrl);
       localStorage.setItem('current_gate', gateFromUrl);
       console.log('Gate detected:', gateFromUrl);
+    }
+  }, []);
+
+  // Check for authenticated user (optional)
+  useEffect(() => {
+    const storedUser = localStorage.getItem('user');
+    const authenticated = localStorage.getItem('authenticated');
+    
+    if (storedUser && authenticated === 'true') {
+      try {
+        setUser(JSON.parse(storedUser));
+      } catch (err) {
+        console.error('Error parsing stored user:', err);
+        localStorage.removeItem('user');
+        localStorage.removeItem('authenticated');
+      }
     }
   }, []);
 
@@ -87,6 +109,15 @@ function App() {
   const showNotification = (message) => {
     setNotification(message);
     setTimeout(() => setNotification(null), 3000);
+  };
+
+  // Handle logout
+  const handleLogout = () => {
+    localStorage.removeItem('user');
+    localStorage.removeItem('authenticated');
+    setUser(null);
+    setCart({});
+    showNotification('👋 Anda telah logout');
   };
 
   // Increment quantity
@@ -161,7 +192,8 @@ function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           gate_id: parseInt(gateNum),
-          items_cart: cart
+          items_cart: cart,
+          user_id: user?.user_id || null  // Pass user_id if logged in, null for guest
         })
       });
 
@@ -329,18 +361,38 @@ function App() {
           </div>
         </div>
 
-        {/* Cart Button */}
-        <button 
-          onClick={() => setIsCartOpen(true)}
-          className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
-        >
-          <span>🛒 Keranjang</span>
-          {cartItemCount > 0 && (
-            <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
-              {cartItemCount}
-            </span>
+        {/* Cart and Auth Buttons */}
+        <div className="flex items-center gap-3">
+          {user && (
+            <span className="text-sm text-slate-600 font-semibold">👤 {user?.full_name || user?.username}</span>
           )}
-        </button>
+          <button 
+            onClick={() => setIsCartOpen(true)}
+            className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
+          >
+            <span>🛒 Keranjang</span>
+            {cartItemCount > 0 && (
+              <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                {cartItemCount}
+              </span>
+            )}
+          </button>
+          {user ? (
+            <button 
+              onClick={handleLogout}
+              className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-5 py-2.5 rounded-2xl font-bold text-rose-700 hover:text-rose-800 hover:border-rose-400 hover:bg-rose-100 transition-all"
+            >
+              🚪 Logout
+            </button>
+          ) : (
+            <button 
+              onClick={() => navigate('/login')}
+              className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-5 py-2.5 rounded-2xl font-bold text-blue-700 hover:text-blue-800 hover:border-blue-400 hover:bg-blue-100 transition-all"
+            >
+              🔐 Login
+            </button>
+          )}
+        </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8 pt-28">

@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
 function Admin() {
+  const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [showForm, setShowForm] = useState(false);
@@ -23,6 +25,16 @@ function Admin() {
     const interval = setInterval(fetchTransactions, 10000);
     return () => clearInterval(interval);
   }, []);
+
+  const fetchItems = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
+      const data = await res.json();
+      setItems(data);
+    } catch (err) {
+      console.error("Error fetching items:", err);
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
@@ -123,12 +135,12 @@ function Admin() {
       <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
         <div className="max-w-7xl mx-auto flex justify-between items-center mb-4">
           <h1 className="text-2xl font-black text-slate-900">Admin Panel</h1>
-          <a 
-            href="/user"
+          <button 
+            onClick={() => navigate('/user')}
             className="px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors"
           >
             ← Kembali ke Belanja
-          </a>
+          </button>
         </div>
         
         {/* Tabs */}

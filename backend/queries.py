@@ -6,6 +6,8 @@ from fastapi import HTTPException
 from typing import List, Dict, Optional
 import asyncpg
 from datetime import datetime, timedelta
+import bcrypt
+import re
 
 # ===== PAYMENT MANAGEMENT (Demo Payment Gateway) =====
 
@@ -458,3 +460,138 @@ async def get_transaction_logs(limit: int = 100) -> List[Dict]:
         """
         rows = await connection.fetch(query, limit)
         return [dict(row) for row in rows]
+
+
+# ===== USER AUTHENTICATION (LOGIN & REGISTER) =====
+
+def _hash_password(password: str) -> str:
+    """Hash password using bcrypt"""
+    salt = bcrypt.gensalt(rounds=12)
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
+
+
+def _verify_password(password: str, password_hash: str) -> bool:
+    """Verify password against hash"""
+    try:
+        return bcrypt.checkpw(password.encode('utf-8'), password_hash.encode('utf-8'))
+    except Exception:
+        return False
+
+
+def _validate_email(email: str) -> bool:
+    """Validate email format"""
+    pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+    return re.match(pattern, email) is not None
+
+
+def _validate_username(username: str) -> bool:
+    """Validate username format (alphanumeric, underscore, dash, 3-30 chars)"""
+    if len(username) < 3 or len(username) > 30:
+        return False
+    pattern = r'^[a-zA-Z0-9_-]+$'
+    return re.match(pattern, username) is not None
+
+
+async def register_user(username: str, email: str, password: str, full_name: str, phone: str = None) -> Dict:
+    """
+    Register new user
+    Security: Input validation, bcrypt password hashing, parameterized queries
+    """
+    # Validate inputs
+    if not _validate_username(username):
+        raise HTTPException(status_code=400, detail="Username must be 3-30 characters, alphanumeric with underscore/dash only")
+    
+    if not _validate_email(email):
+        raise HTTPException(status_code=400, detail="Invalid email format")
+    
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    
+    if not full_name or len(full_name) > 100:
+        raise HTTPException(status_code=400, detail="Invalid full name (max 100 characters)")
+    
+    if phone and len(phone) > 20:
+        raise HTTPException(status_code=400, detail="Invalid phone number (max 20 characters)")
+    
+    # Hash password
+    password_hash = _hash_password(password)
+    
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            # Check if username or email already exists
+            existing = await connection.fetchrow(
+                "SELECT id FROM users WHERE username = $1 OR email = $2",
+                username, email
+            )
+            
+            if existing:
+                raise HTTPException(status_code=400, detail="Username or email already registered")
+            
+            # Create new user
+            result = await connection.fetchrow(
+                """
+                INSERT INTO users (username, email, password_hash, full_name, phone, is_active)
+                VALUES ($1, $2, $3, $4, $5, TRUE)
+                RETURNING id, username, email, full_name, phone, created_at
+                """,
+                username, email, password_hash, full_name, phone
+            )
+            
+            return {
+                "user_id": result['id'],
+                "username": result['username'],
+                "email": result['email'],
+                "full_name": result['full_name'],
+                "phone": result['phone'],
+                "created_at": result['created_at'].isoformat(),
+                "message": "User registered successfully"
+            }
+        except HTTPException:
+            raise
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(status_code=400, detail="Username or email already registered")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+async def login_user(username: str, password: str) -> Dict:
+    """
+    Login user with username and password
+    Security: Parameterized query, bcrypt password verification
+    """
+    if not username or not password:
+        raise HTTPException(status_code=400, detail="Username and password required")
+    
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            # Get user by username
+            user = await connection.fetchrow(
+                "SELECT id, username, email, password_hash, full_name, is_active FROM users WHERE username = $1",
+                username
+            )
+            
+            if not user:
+                raise HTTPException(status_code=401, detail="Invalid username or password")
+            
+            if not user['is_active']:
+                raise HTTPException(status_code=403, detail="Account is disabled")
+            
+            # Verify password
+            if not _verify_password(password, user['password_hash']):
+                raise HTTPException(status_code=401, detail="Invalid username or password")
+            
+            # Login successful
+            return {
+                "user_id": user['id'],
+                "username": user['username'],
+                "email": user['email'],
+                "full_name": user['full_name'],
+                "message": "Login successful"
+            }
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

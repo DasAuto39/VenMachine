@@ -5,6 +5,10 @@ Security: Centralized database connection handling
 import asyncpg
 import os
 from typing import Optional
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 DB_URL = os.getenv("DB_URL")
 

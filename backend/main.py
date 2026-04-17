@@ -13,7 +13,9 @@ from queries import (
     create_transaction,
     process_payment,
     get_transaction_status,
-    get_all_transactions
+    get_all_transactions,
+    register_user,
+    login_user
 )
 
 app = FastAPI(title="Smart Storage API")
@@ -21,7 +23,7 @@ app = FastAPI(title="Smart Storage API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -39,10 +41,22 @@ class HardwareStatus(BaseModel):
 class CheckoutRequest(BaseModel):
     gate_id: int
     items_cart: dict  # {item_id: {item, qty}}
+    user_id: int = None  # Optional for guest checkout
 
 class PaymentRequest(BaseModel):
     transaction_id: int
     payment_method: str  # CASH, QRIS, TRANSFER, CARD
+
+class RegisterRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+    full_name: str
+    phone: str = None
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
 
 class ItemCreate(BaseModel):
     name: str
@@ -71,6 +85,20 @@ async def startup():
 async def shutdown():
     await DatabasePool.close()
 
+# ===== AUTHENTICATION ENDPOINTS =====
+
+# Endpoint: User Registration
+@app.post("/api/register")
+async def register_endpoint(req: RegisterRequest):
+    """Register new user account"""
+    return await register_user(req.username, req.email, req.password, req.full_name, req.phone)
+
+# Endpoint: User Login
+@app.post("/api/login")
+async def login_endpoint(req: LoginRequest):
+    """Login user with username and password"""
+    return await login_user(req.username, req.password)
+
 # Endpoint 1: Mengambil katalog barang untuk UI React
 @app.get("/api/items")
 async def get_items():
@@ -83,7 +111,7 @@ async def get_items():
 @app.post("/api/checkout")
 async def checkout_endpoint(req: CheckoutRequest):
     """Create transaction - customer siap bayar"""
-    return await create_transaction(req.gate_id, req.items_cart)
+    return await create_transaction(req.gate_id, req.items_cart, req.user_id)
 
 # Endpoint 2: Process payment (step 2 - customer bayar)
 @app.post("/api/payment")
