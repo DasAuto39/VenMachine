@@ -11,7 +11,7 @@ import re
 
 # ===== PAYMENT MANAGEMENT (Demo Payment Gateway) =====
 
-async def create_transaction(gate_id: int, items_cart: Dict[int, Dict]) -> Dict:
+async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id: int = None) -> Dict:
     """
     Buat transaction baru ketika customer siap checkout
     Security: Parameterized query, input validation
@@ -40,11 +40,11 @@ async def create_transaction(gate_id: int, items_cart: Dict[int, Dict]) -> Dict:
             
             result = await connection.fetchrow(
                 """
-                INSERT INTO transactions (transaction_code, gate_id, total_amount, payment_status, expired_at)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO transactions (user_id, transaction_code, gate_id, total_amount, payment_status, expired_at)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 RETURNING id, transaction_code, gate_id, total_amount, payment_status, created_at, expired_at
                 """,
-                transaction_code, gate_id, total_amount, 'PENDING', expires_at
+                user_id, transaction_code, gate_id, total_amount, 'PENDING', expires_at
             )
             
             return {

@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
+from typing import Optional
 from database import DatabasePool
 from queries import (
     get_available_items,
@@ -41,7 +42,7 @@ class HardwareStatus(BaseModel):
 class CheckoutRequest(BaseModel):
     gate_id: int
     items_cart: dict  # {item_id: {item, qty}}
-    user_id: int = None  # Optional for guest checkout
+    user_id: Optional[int] = None  # Optional for guest checkout
 
 class PaymentRequest(BaseModel):
     transaction_id: int
@@ -52,7 +53,7 @@ class RegisterRequest(BaseModel):
     email: str
     password: str
     full_name: str
-    phone: str = None
+    phone: Optional[str] = None
 
 class LoginRequest(BaseModel):
     username: str
