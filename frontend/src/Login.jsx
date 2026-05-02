@@ -227,7 +227,7 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
-                {loading ? '⏳ Loading...' : '🔐 Login'}
+                {loading ? ' Loading...' : ' Login'}
               </button>
 
               <p className="text-center text-slate-600 mt-6 text-sm">
@@ -367,7 +367,7 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-slate-200/50 flex items-center justify-between">
             <p className="text-xs text-slate-400">
-              🔒 Password Anda aman terlindungi dengan enkripsi
+               Login
             </p>
             <button
               onClick={() => navigate('/user')}

@@ -36,7 +36,7 @@ async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id:
     async with pool.acquire() as connection:
         try:
             # Create transaction (PENDING until payment)
-            expires_at = datetime.utcnow() + timedelta(minutes=10)  # 10 min to pay
+            expires_at = datetime.utcnow() + timedelta(minutes=5)  # 5 min to pay
             
             result = await connection.fetchrow(
                 """
@@ -92,7 +92,7 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                     "UPDATE transactions SET payment_status = $1 WHERE id = $2",
                     'CANCELLED', transaction_id
                 )
-                raise HTTPException(status_code=400, detail="Payment window expired (10 minutes)")
+                raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
             
             # DEMO: Simulate successful payment (90% success rate)
             import random
@@ -142,6 +142,12 @@ async def get_transaction_status(transaction_id: int) -> Dict:
     """
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
+        # Auto-cancel expired pending transactions
+        await connection.execute(
+            "UPDATE transactions SET payment_status = 'CANCELLED' WHERE payment_status = 'PENDING' AND expired_at < $1",
+            datetime.utcnow()
+        )
+        
         transaction = await connection.fetchrow(
             """
             SELECT id, transaction_code, gate_id, total_amount, payment_status, created_at, paid_at, expired_at
@@ -188,6 +194,12 @@ async def get_all_transactions(limit: int = 50) -> List[Dict]:
     
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
+        # Auto-cancel expired pending transactions
+        await connection.execute(
+            "UPDATE transactions SET payment_status = 'CANCELLED' WHERE payment_status = 'PENDING' AND expired_at < $1",
+            datetime.utcnow()
+        )
+        
         query = """
             SELECT t.id, t.transaction_code, t.gate_id, t.total_amount, t.payment_status, t.created_at, t.paid_at,
                    p.payment_method, p.payment_code
@@ -215,6 +227,49 @@ async def get_all_transactions(limit: int = 50) -> List[Dict]:
         return result
 
 
+async def get_user_transactions(user_id: int, limit: int = 50) -> List[Dict]:
+    """
+    Get transactions for a specific user
+    Security: Parameterized query, limited result set
+    """
+    if limit < 1 or limit > 1000:
+        limit = 50
+    
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        # Auto-cancel expired pending transactions for this user
+        await connection.execute(
+            "UPDATE transactions SET payment_status = 'CANCELLED' WHERE payment_status = 'PENDING' AND user_id = $1 AND expired_at < $2",
+            user_id, datetime.utcnow()
+        )
+        
+        query = """
+            SELECT t.id, t.transaction_code, t.gate_id, t.total_amount, t.payment_status, t.created_at, t.paid_at,
+                   p.payment_method, p.payment_code
+            FROM transactions t
+            LEFT JOIN payments p ON t.id = p.transaction_id
+            WHERE t.user_id = $1
+            ORDER BY t.created_at DESC
+            LIMIT $2
+        """
+        rows = await connection.fetch(query, user_id, limit)
+        
+        result = []
+        for row in rows:
+            result.append({
+                "transaction_id": row['id'],
+                "transaction_code": row['transaction_code'],
+                "gate_id": row['gate_id'],
+                "total_amount": float(row['total_amount']),
+                "payment_status": row['payment_status'],
+                "payment_method": row['payment_method'],
+                "payment_code": row['payment_code'],
+                "created_at": row['created_at'].isoformat(),
+                "paid_at": row['paid_at'].isoformat() if row['paid_at'] else None
+            })
+        
+        return result
+
 # ===== PUBLIC QUERIES (User Shopping) =====
 
 async def get_available_items() -> List[Dict]:
@@ -228,7 +283,7 @@ async def get_available_items() -> List[Dict]:
             SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, s.row_position, s.location_code 
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
-            WHERE i.stock_quantity > 0
+            --WHERE i.stock_quantity > 0
             ORDER BY i.name
         """
         rows = await connection.fetch(query)
@@ -593,5 +648,127 @@ async def login_user(username: str, password: str) -> Dict:
             }
         except HTTPException:
             raise
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# ===== INFORMATION POSTS QUERIES =====
+
+async def get_all_posts() -> List[Dict]:
+    """Admin view: Get all posts including unpublished ones"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        query = """
+            SELECT p.id, p.title, p.content, p.image_url, p.item_id, p.is_published, 
+                   p.created_at, p.updated_at, i.name as item_name
+            FROM information_posts p
+            LEFT JOIN items i ON p.item_id = i.id
+            ORDER BY p.created_at DESC
+        """
+        rows = await connection.fetch(query)
+        result = []
+        for row in rows:
+            d = dict(row)
+            d['created_at'] = d['created_at'].isoformat()
+            d['updated_at'] = d['updated_at'].isoformat()
+            result.append(d)
+        return result
+
+async def get_published_posts() -> List[Dict]:
+    """Public view: Get only published posts"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        query = """
+            SELECT p.id, p.title, p.content, p.image_url, p.item_id, p.is_published, 
+                   p.created_at, p.updated_at, i.name as item_name
+            FROM information_posts p
+            LEFT JOIN items i ON p.item_id = i.id
+            WHERE p.is_published = TRUE
+            ORDER BY p.created_at DESC
+        """
+        rows = await connection.fetch(query)
+        result = []
+        for row in rows:
+            d = dict(row)
+            d['created_at'] = d['created_at'].isoformat()
+            d['updated_at'] = d['updated_at'].isoformat()
+            result.append(d)
+        return result
+
+async def create_post(title: str, content: str, image_url: str = None, item_id: int = None, is_published: bool = True) -> Dict:
+    """Create a new post"""
+    if not title or not content:
+        raise HTTPException(status_code=400, detail="Title and content are required")
+        
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            result = await connection.fetchrow(
+                """
+                INSERT INTO information_posts (title, content, image_url, item_id, is_published)
+                VALUES ($1, $2, $3, $4, $5)
+                RETURNING id, title, content, image_url, item_id, is_published, created_at
+                """,
+                title, content, image_url, item_id, is_published
+            )
+            d = dict(result)
+            d['created_at'] = d['created_at'].isoformat()
+            return d
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+async def update_post(post_id: int, **kwargs) -> Dict:
+    """Update an existing post"""
+    pool = DatabasePool.get_pool()
+    
+    allowed_fields = {'title', 'content', 'image_url', 'item_id', 'is_published'}
+    updates = {k: v for k, v in kwargs.items() if k in allowed_fields and v is not None}
+    
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+        
+    set_clauses = []
+    values = []
+    counter = 1
+    
+    for field, value in updates.items():
+        set_clauses.append(f"{field} = ${counter}")
+        values.append(value)
+        counter += 1
+        
+    set_clauses.append("updated_at = NOW()")
+    values.append(post_id)
+    
+    async with pool.acquire() as connection:
+        try:
+            query = f"""
+                UPDATE information_posts
+                SET {', '.join(set_clauses)}
+                WHERE id = ${counter}
+                RETURNING id, title, content, image_url, item_id, is_published, created_at, updated_at
+            """
+            result = await connection.fetchrow(query, *values)
+            if not result:
+                raise HTTPException(status_code=404, detail="Post not found")
+                
+            d = dict(result)
+            d['created_at'] = d['created_at'].isoformat()
+            d['updated_at'] = d['updated_at'].isoformat()
+            return d
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+async def delete_post(post_id: int) -> Dict:
+    """Delete a post"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            result = await connection.fetchrow(
+                "DELETE FROM information_posts WHERE id = $1 RETURNING id",
+                post_id
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Post not found")
+            return {"message": "Post deleted successfully", "id": post_id}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")

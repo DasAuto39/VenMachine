@@ -35,6 +35,11 @@ function App({ onGoToAdmin, onGoToLogin }) {
       setCurrentGate(gateFromUrl);
       localStorage.setItem('current_gate', gateFromUrl);
       console.log('Gate detected:', gateFromUrl);
+    } else {
+      const savedGate = localStorage.getItem('current_gate');
+      if (savedGate) {
+        setCurrentGate(savedGate);
+      }
     }
   }, []);
 
@@ -53,16 +58,16 @@ function App({ onGoToAdmin, onGoToLogin }) {
               const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
               
               client.on('connect', () => {
-                console.log('✅ MQTT Connected to broker');
+                console.log(' MQTT Connected to broker');
                 setMqttConnected(true);
               });
               
               client.on('error', (err) => {
-                console.error('❌ MQTT Error:', err);
+                console.error(' MQTT Error:', err);
               });
               
               client.on('disconnect', () => {
-                console.log('⚠️ MQTT Disconnected');
+                console.log(' MQTT Disconnected');
                 setMqttConnected(false);
               });
               
@@ -75,16 +80,16 @@ function App({ onGoToAdmin, onGoToLogin }) {
           const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
           
           client.on('connect', () => {
-            console.log('✅ MQTT Connected to broker');
+            console.log(' MQTT Connected to broker');
             setMqttConnected(true);
           });
           
           client.on('error', (err) => {
-            console.error('❌ MQTT Error:', err);
+            console.error(' MQTT Error:', err);
           });
           
           client.on('disconnect', () => {
-            console.log('⚠️ MQTT Disconnected');
+            console.log(' MQTT Disconnected');
             setMqttConnected(false);
           });
           
@@ -147,9 +152,21 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
   // Tambah item ke cart atau increment quantity jika sudah ada
   const addToCart = (item) => {
+    // Check if item has stock
+    if (item.stock_quantity <= 0) {
+      showNotification(`❌ ${item.name} telah habis terjual`);
+      return;
+    }
+
     // Calculate new quantity based on current cart state
     const currentQty = cart[item.id]?.qty || 0;
     const newQty = currentQty + 1;
+
+    // Validate against stock
+    if (newQty > item.stock_quantity) {
+      showNotification(`❌ Stok ${item.name} hanya tersedia ${item.stock_quantity} buah`);
+      return;
+    }
 
     // Update cart
     setCart(prevCart => {
@@ -170,7 +187,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
     });
 
     // Show notification with correct quantity
-    showNotification(`${item.name} dalam keranjang: ${newQty}`);
+    showNotification(`✅ ${item.name} dalam keranjang: ${newQty}`);
   };
 
   // Notification helper
@@ -185,18 +202,29 @@ function App({ onGoToAdmin, onGoToLogin }) {
     localStorage.removeItem('authenticated');
     setUser(null);
     setCart({});
-    showNotification('👋 Anda telah logout');
+    showNotification('Anda telah logout');
   };
 
-  // Increment quantity
+  // Increment quantity with stock validation
   const incrementQuantity = (itemId) => {
-    setCart(prevCart => ({
-      ...prevCart,
-      [itemId]: {
-        ...prevCart[itemId],
-        qty: prevCart[itemId].qty + 1
+    setCart(prevCart => {
+      const currentItem = prevCart[itemId];
+      const newQty = currentItem.qty + 1;
+      
+      // Check if new quantity exceeds stock
+      if (newQty > currentItem.item.stock_quantity) {
+        showNotification(`❌ Stok ${currentItem.item.name} hanya ${currentItem.item.stock_quantity} buah`);
+        return prevCart;
       }
-    }));
+      
+      return {
+        ...prevCart,
+        [itemId]: {
+          ...prevCart[itemId],
+          qty: newQty
+        }
+      };
+    });
   };
 
   // Decrement quantity atau hapus jika qty jadi 0
@@ -276,10 +304,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
       setIsProcessing(false);
       setIsCartOpen(false);
 
-      console.log('✅ Transaction created:', transactionData);
+      console.log(' Transaction created:', transactionData);
     } catch (err) {
       console.error("Checkout error:", err);
-      showNotification(`❌ Error: ${err.message}`);
+      showNotification(` Error: ${err.message}`);
       setIsProcessing(false);
     }
   };
@@ -304,13 +332,13 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
       if (paymentData.status === 'SUCCESS') {
         setPaymentStatus('success');
-        showNotification('✅ Pembayaran berhasil! Ambil barang Anda.');
+        showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.');
 
         // Send MQTT command to ESP32
         sendToMachine(cart, currentGate);
 
         // Clear cart and close modal after success
-        setTimeout(() => {
+        setTimeout(async () => {
           setCart({});
           setIsPaymentModalOpen(false);
           setPaymentStatus(null);
@@ -318,14 +346,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
           setIsProcessing(false);
 
           // Dispense items (trigger hardware)
-          dispenseItems();
+          await dispenseItems();
 
           // Refresh items
-          fetchItems();
+          await fetchItems();
         }, 2000);
       } else {
         setPaymentStatus('failed');
-        showNotification('❌ Pembayaran gagal! Silahkan coba lagi.');
+        showNotification('Pembayaran gagal! Silahkan coba lagi.');
         setIsProcessing(false);
       }
 
@@ -333,7 +361,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
     } catch (err) {
       console.error("Payment error:", err);
       setPaymentStatus('failed');
-      showNotification(`❌ Error pembayaran: ${err.message}`);
+      showNotification(` Error pembayaran: ${err.message}`);
       setIsProcessing(false);
     }
   };
@@ -358,7 +386,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
   const sendToMachine = (cartData, gateId) => {
     if (!mqttClientRef.current || !mqttClientRef.current.connected) {
-      console.warn('⚠️ MQTT not connected, skipping send');
+      console.warn(' MQTT not connected, skipping send');
       return;
     }
 
@@ -372,9 +400,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
         }
       }
 
-      // Get machine ID from gate (e.g., "gate1" -> "VM001")
-      //const machineId = `VM${String(gateId).replace(/\D/g, '') || '001'}`;
-      const machineId = "VM001";
+      // Get machine ID from gate (e.g., "gate_1" -> "VM001")
+      const numStr = String(gateId).replace(/\D/g, '') || '1';
+      const machineId = `VM${numStr.padStart(3, '0')}`;
+
       // MQTT topic and simple payload
       const topic = `vending/${machineId}/cmd`;
       const payload = {
@@ -382,9 +411,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
       };
 
       mqttClientRef.current.publish(topic, JSON.stringify(payload));
-      console.log('📤 MQTT sent to ESP32:', { topic, payload });
+      console.log(' MQTT sent to ESP32:', { topic, payload });
     } catch (err) {
-      console.error('❌ Error sending MQTT:', err);
+      console.error(' Error sending MQTT:', err);
     }
   };
 
@@ -467,8 +496,19 @@ function App({ onGoToAdmin, onGoToLogin }) {
           {/* Cart and Auth Buttons */}
           <div className="flex items-center gap-3">
             {user && (
-              <span className="text-sm text-slate-600 font-semibold">👤 {user?.full_name || user?.username}</span>
+              <button
+                onClick={() => navigate('/profile')}
+                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all shadow-sm border border-slate-200"
+              >
+                <span className="text-sm text-slate-700 font-bold">👤 {user?.full_name || user?.username}</span>
+              </button>
             )}
+            <button
+              onClick={() => navigate('/information')}
+              className="relative flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-400 px-5 py-2.5 rounded-2xl font-bold text-purple-700 hover:text-purple-800 hover:bg-gradient-to-r hover:from-purple-100 hover:to-pink-100 transition-all shadow-sm hover:shadow-md"
+            >
+              <span>📰 Info & Promo</span>
+            </button>
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
@@ -574,13 +614,15 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 filteredItems.map((item) => (
                   <div
                     key={item.id}
-                    className="bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group cursor-pointer"
-                    onClick={() => openProductDetail(item)}
+                    className={`bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group ${
+                      item.stock_quantity === 0 ? 'opacity-50 hover:border-slate-200 hover:shadow-slate-200/30' : ''
+                    }`}
+                    onClick={() => item.stock_quantity > 0 && openProductDetail(item)}
                     title={item.description || item.name}
                   >
 
                     {/* Kotak Gambar dengan Fallback Emoji */}
-                    <div className="w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden">
+                    <div className="relative w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden">
                       {item.image_url ? (
                         <img
                           src={item.image_url}
@@ -598,6 +640,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
                       >
                         🛒
                       </span>
+                      {/* Out of Stock Badge */}
+                      {item.stock_quantity === 0 && (
+                        <div className="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center">
+                          <span className="text-white font-black text-lg bg-red-600 px-4 py-2 rounded-full">HABIS</span>
+                        </div>
+                      )}
                     </div>
 
                     <div className="px-2 flex-1 flex flex-col">
@@ -732,7 +780,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
                   disabled={cartItemCount === 0}
                   className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl disabled:bg-slate-300 disabled:text-slate-500 transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none text-lg active:scale-[0.98]"
                 >
-                  {isProcessing ? '⏳ Memproses...' : '💳 Lanjut ke Pembayaran'}
+                  {isProcessing ? ' Memproses...' : ' Lanjut ke Pembayaran'}
                 </button>
               </div>
 
@@ -751,7 +799,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
             {/* Modal Panel */}
             <div className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4">
-              <h2 className="text-2xl font-black mb-6 text-center">💳 Pilih Metode Pembayaran</h2>
+              <h2 className="text-2xl font-black mb-6 text-center"> Pilih Metode Pembayaran</h2>
 
               {paymentStatus === 'success' && (
                 <div className="text-center py-8">
@@ -779,10 +827,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 <>
                   <div className="space-y-3 mb-6">
                     {[
-                      { value: 'QRIS', label: '📱 QRIS', desc: 'Scan QR Code' },
-                      { value: 'TRANSFER', label: '🏦 Transfer Bank', desc: 'Transfer ATM/Mobile Banking' },
-                      { value: 'CARD', label: '💳 Kartu Kredit', desc: 'Visa, Mastercard, dll' },
-                      { value: 'CASH', label: '💵 Tunai', desc: 'Bayar dengan uang tunai' },
+                      { value: 'QRIS', label: ' QRIS', desc: 'Scan QR Code' },
+                      { value: 'TRANSFER', label: ' Transfer Bank', desc: 'Transfer ATM/Mobile Banking' },
+                      { value: 'CARD', label: ' Kartu Kredit', desc: 'Visa, Mastercard, dll' },
+                      { value: 'CASH', label: ' Tunai', desc: 'Bayar dengan uang tunai' },
                     ].map(method => (
                       <button
                         key={method.value}

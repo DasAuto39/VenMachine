@@ -15,8 +15,14 @@ from queries import (
     process_payment,
     get_transaction_status,
     get_all_transactions,
+    get_user_transactions,
     register_user,
-    login_user
+    login_user,
+    get_all_posts,
+    get_published_posts,
+    create_post,
+    update_post,
+    delete_post
 )
 
 app = FastAPI(title="Smart Storage API")
@@ -24,7 +30,7 @@ app = FastAPI(title="Smart Storage API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -112,6 +118,25 @@ async def get_items():
 @app.post("/api/checkout")
 async def checkout_endpoint(req: CheckoutRequest):
     """Create transaction - customer siap bayar"""
+    # Validate stock availability for all items in cart
+    available_items = await get_all_items()  # Get current stock from database
+    
+    for item_id_str, cart_item in req.items_cart.items():
+        item_id = int(item_id_str)
+        requested_qty = cart_item['qty']
+        
+        # Find item in database
+        db_item = next((it for it in available_items if it['id'] == item_id), None)
+        
+        if not db_item:
+            raise HTTPException(status_code=404, detail=f"Item {item_id} tidak ditemukan")
+        
+        if db_item['stock_quantity'] < requested_qty:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"{db_item['name']}: stok hanya {db_item['stock_quantity']} buah, Anda meminta {requested_qty} buah"
+            )
+    
     return await create_transaction(req.gate_id, req.items_cart, req.user_id)
 
 # Endpoint 2: Process payment (step 2 - customer bayar)
@@ -191,3 +216,50 @@ async def delete_item_endpoint(item_id: int):
 async def get_transactions_endpoint(limit: int = 50):
     """Get all transactions (Admin view)"""
     return await get_all_transactions(limit)
+
+# Endpoint: Get user transactions
+@app.get("/api/user/{user_id}/transactions")
+async def get_user_transactions_endpoint(user_id: int, limit: int = 50):
+    """Get all transactions for a specific user"""
+    return await get_user_transactions(user_id, limit)
+
+# ===== INFORMATION POSTS ENDPOINTS =====
+
+class InformationPostCreate(BaseModel):
+    title: str
+    content: str
+    image_url: Optional[str] = None
+    item_id: Optional[int] = None
+    is_published: bool = True
+
+class InformationPostUpdate(BaseModel):
+    title: Optional[str] = None
+    content: Optional[str] = None
+    image_url: Optional[str] = None
+    item_id: Optional[int] = None
+    is_published: Optional[bool] = None
+
+@app.get("/api/posts")
+async def get_public_posts():
+    """Get all published posts"""
+    return await get_published_posts()
+
+@app.get("/api/admin/posts")
+async def get_admin_posts():
+    """Get all posts including unpublished"""
+    return await get_all_posts()
+
+@app.post("/api/admin/posts")
+async def create_post_endpoint(post: InformationPostCreate):
+    """Create a new post"""
+    return await create_post(post.title, post.content, post.image_url, post.item_id, post.is_published)
+
+@app.put("/api/admin/posts/{post_id}")
+async def update_post_endpoint(post_id: int, post: InformationPostUpdate):
+    """Update a post"""
+    return await update_post(post_id, title=post.title, content=post.content, image_url=post.image_url, item_id=post.item_id, is_published=post.is_published)
+
+@app.delete("/api/admin/posts/{post_id}")
+async def delete_post_endpoint(post_id: int):
+    """Delete a post"""
+    return await delete_post(post_id)

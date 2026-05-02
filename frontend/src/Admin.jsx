@@ -16,10 +16,23 @@ function Admin() {
     location_id: ''
   });
 
+  // Posts state
+  const [posts, setPosts] = useState([]);
+  const [showPostForm, setShowPostForm] = useState(false);
+  const [editingPostId, setEditingPostId] = useState(null);
+  const [postFormData, setPostFormData] = useState({
+    title: '',
+    content: '',
+    image_url: '',
+    item_id: '',
+    is_published: true
+  });
+
   // Fetch all items and transactions
   useEffect(() => {
     fetchItems();
     fetchTransactions();
+    fetchPosts();
     
     // Refresh transactions every 10 seconds
     const interval = setInterval(fetchTransactions, 10000);
@@ -33,6 +46,16 @@ function Admin() {
       setItems(data);
     } catch (err) {
       console.error("Error fetching items:", err);
+    }
+  };
+
+  const fetchPosts = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/posts`);
+      const data = await res.json();
+      setPosts(data);
+    } catch (err) {
+      console.error("Error fetching posts:", err);
     }
   };
 
@@ -129,6 +152,89 @@ function Admin() {
     setFormData({ name: '', sku: '', price: '', stock_quantity: '', location_id: '' });
   };
 
+  const handlePostInputChange = (e) => {
+    const { name, value, type, checked } = e.target;
+    setPostFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? checked : value
+    }));
+  };
+
+  const handlePostSubmit = async (e) => {
+    e.preventDefault();
+    if (!postFormData.title || !postFormData.content) {
+      alert("Title dan Content harus diisi!");
+      return;
+    }
+    try {
+      const payload = {
+        title: postFormData.title,
+        content: postFormData.content,
+        image_url: postFormData.image_url || null,
+        item_id: postFormData.item_id ? parseInt(postFormData.item_id) : null,
+        is_published: postFormData.is_published
+      };
+      
+      const url = editingPostId 
+        ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/posts/${editingPostId}`
+        : `${import.meta.env.VITE_API_BASE_URL}/api/admin/posts`;
+      
+      const method = editingPostId ? 'PUT' : 'POST';
+      
+      const res = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (res.ok) {
+        alert(`Post berhasil ${editingPostId ? 'diperbarui' : 'ditambahkan'}!`);
+        handlePostCancel();
+        fetchPosts();
+      } else {
+        const errData = await res.json();
+        alert(`Gagal: ${errData.detail || 'Terjadi kesalahan'}`);
+      }
+    } catch (err) {
+      console.error("Error:", err);
+      alert("Terjadi kesalahan!");
+    }
+  };
+
+  const handlePostEdit = (post) => {
+    setPostFormData({
+      title: post.title,
+      content: post.content,
+      image_url: post.image_url || '',
+      item_id: post.item_id || '',
+      is_published: post.is_published
+    });
+    setEditingPostId(post.id);
+    setShowPostForm(true);
+  };
+
+  const handlePostDelete = async (id) => {
+    if (confirm("Yakin ingin menghapus post ini?")) {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/posts/${id}`, {
+          method: 'DELETE'
+        });
+        if (res.ok) {
+          alert("Post berhasil dihapus!");
+          fetchPosts();
+        }
+      } catch (err) {
+        console.error("Error:", err);
+      }
+    }
+  };
+
+  const handlePostCancel = () => {
+    setShowPostForm(false);
+    setEditingPostId(null);
+    setPostFormData({ title: '', content: '', image_url: '', item_id: '', is_published: true });
+  };
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -165,6 +271,16 @@ function Admin() {
           >
             Riwayat Pembayaran ({transactions.length})
           </button>
+          <button
+            onClick={() => setActiveTab('posts')}
+            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+              activeTab === 'posts'
+                ? 'bg-purple-500 text-white'
+                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+            }`}
+          >
+            Manajemen Informasi ({posts.length})
+          </button>
         </div>
       </header>
 
@@ -190,7 +306,7 @@ function Admin() {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-2xl p-6 max-w-md w-full">
               <h2 className="text-xl font-bold mb-4">
-                {editingId ? '✏️ Edit Produk' : '➕ Tambah Produk Baru'}
+                {editingId ? ' Edit Produk' : ' Tambah Produk Baru'}
               </h2>
 
               <form onSubmit={handleSubmit} className="space-y-4">
@@ -311,13 +427,13 @@ function Admin() {
                         onClick={() => handleEdit(item)}
                         className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 transition-colors"
                       >
-                        ✏️ Edit
+                         Edit
                       </button>
                       <button
                         onClick={() => handleDelete(item.id)}
                         className="px-3 py-1 bg-rose-500 text-white rounded-lg text-sm font-bold hover:bg-rose-600 transition-colors"
                       >
-                        🗑️ Hapus
+                         Hapus
                       </button>
                     </td>
                   </tr>
@@ -437,6 +553,170 @@ function Admin() {
               </div>
             </div>
           </div>
+        )}
+
+        {/* POSTS TAB */}
+        {activeTab === 'posts' && (
+          <>
+            <button
+              onClick={() => {
+                setShowPostForm(true);
+                setEditingPostId(null);
+              }}
+              className="mb-6 px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition-colors"
+            >
+              + Tambah Post Baru
+            </button>
+
+            {showPostForm && (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+                <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+                  <h2 className="text-xl font-bold mb-4">
+                    {editingPostId ? ' Edit Post' : ' Tambah Post Baru'}
+                  </h2>
+
+                  <form onSubmit={handlePostSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Judul Post</label>
+                      <input
+                        type="text"
+                        name="title"
+                        value={postFormData.title}
+                        onChange={handlePostInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="Contoh: Promo Bayam Segar"
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Konten (Mendukung Markdown)</label>
+                      <textarea
+                        name="content"
+                        value={postFormData.content}
+                        onChange={handlePostInputChange}
+                        rows={6}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="Tulis informasi atau promo di sini..."
+                        required
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">URL Gambar (Opsional)</label>
+                      <input
+                        type="text"
+                        name="image_url"
+                        value={postFormData.image_url}
+                        onChange={handlePostInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                        placeholder="https://example.com/image.jpg"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Terkait Produk (Opsional)</label>
+                      <select
+                        name="item_id"
+                        value={postFormData.item_id}
+                        onChange={handlePostInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
+                      >
+                        <option value="">-- Pilih Produk --</option>
+                        {items.map(item => (
+                          <option key={item.id} value={item.id}>{item.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="checkbox"
+                        id="is_published"
+                        name="is_published"
+                        checked={postFormData.is_published}
+                        onChange={handlePostInputChange}
+                        className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                      />
+                      <label htmlFor="is_published" className="text-sm font-semibold">Publikasikan</label>
+                    </div>
+
+                    <div className="flex gap-3 pt-4">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-purple-500 text-white py-2 rounded-lg font-bold hover:bg-purple-600 transition-colors"
+                      >
+                        {editingPostId ? 'Simpan Perubahan' : 'Tambahkan Post'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handlePostCancel}
+                        className="flex-1 bg-slate-300 text-slate-700 py-2 rounded-lg font-bold hover:bg-slate-400 transition-colors"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-100 border-b border-slate-200">
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">ID</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Judul</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Status</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Tanggal</th>
+                      <th className="px-6 py-4 text-center font-bold text-slate-700">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {posts.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" className="px-6 py-12 text-center text-slate-500">
+                          Belum ada post informasi.
+                        </td>
+                      </tr>
+                    ) : (
+                      posts.map((post) => (
+                        <tr key={post.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                          <td className="px-6 py-4 text-slate-700 font-semibold">{post.id}</td>
+                          <td className="px-6 py-4 text-slate-700 font-semibold max-w-xs truncate" title={post.title}>{post.title}</td>
+                          <td className="px-6 py-4">
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
+                              post.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+                            }`}>
+                              {post.is_published ? 'PUBLISHED' : 'DRAFT'}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-slate-600 text-sm">
+                            {new Date(post.created_at).toLocaleDateString('id-ID')}
+                          </td>
+                          <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
+                            <button
+                              onClick={() => handlePostEdit(post)}
+                              className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 transition-colors"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handlePostDelete(post.id)}
+                              className="px-3 py-1 bg-rose-500 text-white rounded-lg text-sm font-bold hover:bg-rose-600 transition-colors"
+                            >
+                              Hapus
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </>
         )}
       </main>
     </div>
