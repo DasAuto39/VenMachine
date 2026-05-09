@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -135,7 +136,8 @@ export default function Login() {
           user_id: data.user_id,
           username: data.username,
           email: data.email,
-          full_name: data.full_name
+          full_name: data.full_name,
+          role: data.role
         };
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('authenticated', 'true');
@@ -186,7 +188,7 @@ export default function Login() {
           {error && (
             <div className="bg-rose-100/80 border border-rose-300 text-rose-700 px-4 py-3 rounded-xl mb-6 font-medium text-sm">
               <p className="flex items-center gap-2">
-                <span>⚠️</span> {error}
+                <AlertTriangle size={18} /> {error}
               </p>
             </div>
           )}
@@ -227,7 +229,9 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
-                {loading ? ' Loading...' : ' Login'}
+                <div className="flex items-center justify-center gap-2">
+                  {loading ? <><Loader2 size={18} className="animate-spin"/> Loading...</> : 'Login'}
+                </div>
               </button>
 
               <p className="text-center text-slate-600 mt-6 text-sm">
@@ -337,7 +341,9 @@ export default function Login() {
                 disabled={loading}
                 className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-green-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
-                {loading ? '⏳ Loading...' : '✓ Daftar'}
+                <div className="flex items-center justify-center gap-2">
+                  {loading ? <><Loader2 size={18} className="animate-spin"/> Loading...</> : <><CheckCircle2 size={18} /> Daftar</>}
+                </div>
               </button>
 
               <p className="text-center text-slate-600 mt-6 text-sm">

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ShoppingCart, LogOut, Newspaper, CheckCircle2, XCircle, Loader2, Package } from 'lucide-react';
 import ProductDetail from './ProductDetail';
 
 function App({ onGoToAdmin, onGoToLogin }) {
@@ -56,21 +57,41 @@ function App({ onGoToAdmin, onGoToLogin }) {
           script.onload = () => {
             if (window.mqtt) {
               const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
-              
+
               client.on('connect', () => {
                 console.log(' MQTT Connected to broker');
                 setMqttConnected(true);
+                client.subscribe('vending/+/status');
               });
-              
+
+              client.on('message', async (topic, message) => {
+                try {
+                  const payload = JSON.parse(message.toString());
+                  if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
+                    console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
+                    // Trigger backend to update DB
+                    const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items/${payload.item_id}/restock`, {
+                      method: 'POST'
+                    });
+                    if (res.ok) {
+                      console.log('Successfully processed restock via backend');
+                      fetchItems();
+                    }
+                  }
+                } catch (err) {
+                  console.error('Error parsing MQTT message:', err);
+                }
+              });
+
               client.on('error', (err) => {
                 console.error(' MQTT Error:', err);
               });
-              
+
               client.on('disconnect', () => {
                 console.log(' MQTT Disconnected');
                 setMqttConnected(false);
               });
-              
+
               mqttClientRef.current = client;
             }
           };
@@ -78,21 +99,41 @@ function App({ onGoToAdmin, onGoToLogin }) {
         } else if (window.mqtt && !mqttClientRef.current) {
           // Library already loaded
           const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
-          
+
           client.on('connect', () => {
             console.log(' MQTT Connected to broker');
             setMqttConnected(true);
+            client.subscribe('vending/+/status');
           });
-          
+
+          client.on('message', async (topic, message) => {
+            try {
+              const payload = JSON.parse(message.toString());
+              if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
+                console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
+                // Trigger backend to update DB
+                const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items/${payload.item_id}/restock`, {
+                  method: 'POST'
+                });
+                if (res.ok) {
+                  console.log('Successfully processed restock via backend');
+                  fetchItems();
+                }
+              }
+            } catch (err) {
+              console.error('Error parsing MQTT message:', err);
+            }
+          });
+
           client.on('error', (err) => {
             console.error(' MQTT Error:', err);
           });
-          
+
           client.on('disconnect', () => {
             console.log(' MQTT Disconnected');
             setMqttConnected(false);
           });
-          
+
           mqttClientRef.current = client;
         }
       } catch (err) {
@@ -153,8 +194,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
   // Tambah item ke cart atau increment quantity jika sudah ada
   const addToCart = (item) => {
     // Check if item has stock
-    if (item.stock_quantity <= 0) {
-      showNotification(`❌ ${item.name} telah habis terjual`);
+    if (item.machine_stock <= 0) {
+      showNotification(`${item.name} telah habis terjual`, 'error');
       return;
     }
 
@@ -163,8 +204,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
     const newQty = currentQty + 1;
 
     // Validate against stock
-    if (newQty > item.stock_quantity) {
-      showNotification(`❌ Stok ${item.name} hanya tersedia ${item.stock_quantity} buah`);
+    if (newQty > item.machine_stock) {
+      showNotification(`Stok ${item.name} di mesin hanya tersedia ${item.machine_stock} buah`, 'error');
       return;
     }
 
@@ -186,13 +227,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
       }
     });
 
-    // Show notification with correct quantity
-    showNotification(`✅ ${item.name} dalam keranjang: ${newQty}`);
+    showNotification(`${item.name} dalam keranjang: ${newQty}`, 'success');
   };
 
   // Notification helper
-  const showNotification = (message) => {
-    setNotification(message);
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
 
@@ -202,7 +242,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
     localStorage.removeItem('authenticated');
     setUser(null);
     setCart({});
-    showNotification('Anda telah logout');
+    showNotification('Anda telah logout', 'success');
   };
 
   // Increment quantity with stock validation
@@ -210,13 +250,13 @@ function App({ onGoToAdmin, onGoToLogin }) {
     setCart(prevCart => {
       const currentItem = prevCart[itemId];
       const newQty = currentItem.qty + 1;
-      
+
       // Check if new quantity exceeds stock
-      if (newQty > currentItem.item.stock_quantity) {
-        showNotification(`❌ Stok ${currentItem.item.name} hanya ${currentItem.item.stock_quantity} buah`);
+      if (newQty > currentItem.item.machine_stock) {
+        showNotification(`Stok ${currentItem.item.name} di mesin hanya ${currentItem.item.machine_stock} buah`, 'error');
         return prevCart;
       }
-      
+
       return {
         ...prevCart,
         [itemId]: {
@@ -307,7 +347,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
       console.log(' Transaction created:', transactionData);
     } catch (err) {
       console.error("Checkout error:", err);
-      showNotification(` Error: ${err.message}`);
+      showNotification(` Error: ${err.message}`, 'error');
       setIsProcessing(false);
     }
   };
@@ -332,10 +372,32 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
       if (paymentData.status === 'SUCCESS') {
         setPaymentStatus('success');
-        showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.');
+        showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.', 'success');
 
-        // Send MQTT command to ESP32
+        // Send MQTT command to ESP32 for dispensed items
         sendToMachine(cart, currentGate);
+
+        // Check if we need to trigger restock based on new machine_stock
+        if (paymentData.dispensed_items && paymentData.dispensed_items.length > 0) {
+          const numStr = String(currentGate).replace(/\D/g, '') || '1';
+          const machineId = `VM${numStr.padStart(3, '0')}`;
+          
+          for (const dispensed of paymentData.dispensed_items) {
+            if (dispensed.remaining_machine_stock < 2) {
+              // Send RESTOCK command to MQTT
+              if (mqttClientRef.current && mqttClientRef.current.connected) {
+                const restockTopic = `vending/${machineId}/cmd`;
+                const restockPayload = {
+                  command: "RESTOCK",
+                  item_id: dispensed.item_id,
+                  location_id: dispensed.location_id
+                };
+                mqttClientRef.current.publish(restockTopic, JSON.stringify(restockPayload));
+                console.log('MQTT sent RESTOCK command:', { topic: restockTopic, payload: restockPayload });
+              }
+            }
+          }
+        }
 
         // Clear cart and close modal after success
         setTimeout(async () => {
@@ -345,15 +407,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
           setTransactionId(null);
           setIsProcessing(false);
 
-          // Dispense items (trigger hardware)
-          await dispenseItems();
-
-          // Refresh items
+          // Refresh items (stock already decremented atomically in backend)
           await fetchItems();
         }, 2000);
       } else {
         setPaymentStatus('failed');
-        showNotification('Pembayaran gagal! Silahkan coba lagi.');
+        showNotification('Pembayaran gagal! Silahkan coba lagi.', 'error');
         setIsProcessing(false);
       }
 
@@ -361,26 +420,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
     } catch (err) {
       console.error("Payment error:", err);
       setPaymentStatus('failed');
-      showNotification(` Error pembayaran: ${err.message}`);
+      showNotification(` Error pembayaran: ${err.message}`, 'error');
       setIsProcessing(false);
-    }
-  };
-
-  const dispenseItems = async () => {
-    try {
-      for (const itemId in cart) {
-        const { qty } = cart[itemId];
-        await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/dispense`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            item_id: parseInt(itemId),
-            requested_qty: qty
-          })
-        });
-      }
-    } catch (err) {
-      console.error("Dispense error:", err);
     }
   };
 
@@ -429,24 +470,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
       return matchesSearch;
     }
 
-    // Map kategori ke jenis produk
-    const categoryMap = {
-      "Sayuran Segar": ["bayam", "wortel", "brokoli"],
-      "Buah Pilihan": ["apel", "pisang", "jeruk"],
-      "Sembako": ["beras", "minyak", "gula"],
-      "Minuman": ["susu", "jus", "air mineral"],
-      "Snack": ["chips", "kacang", "coklat"],
-      "Daging": []
-    };
-
-    const itemNameLower = item.name.toLowerCase();
-    const categoryItems = categoryMap[selectedCategory] || [];
-    const matchesCategory = categoryItems.some(cat => itemNameLower.includes(cat));
-
-    return matchesSearch && matchesCategory;
+    // Filter by category from database
+    return matchesSearch && item.category === selectedCategory;
   });
 
-  const categories = ["Semua", "Sayuran Segar", "Buah Pilihan", "Sembako", "Minuman", "Snack", "Daging"];
+  // Build dynamic categories from database items
+  const categories = ["Semua", ...new Set(items.map(item => item.category || 'Lainnya').filter(Boolean))];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50 text-slate-800 font-sans selection:bg-emerald-200 relative overflow-hidden">
@@ -469,10 +498,16 @@ function App({ onGoToAdmin, onGoToLogin }) {
       {/* Content wrapper with relative positioning */}
       <div className="relative z-10">
 
-        {/* Notification Toast */}
+        {/* Toast Notification */}
         {notification && (
-          <div className="fixed top-6 left-1/2 transform -translate-x-1/2 bg-emerald-500 text-white px-6 py-3 rounded-2xl shadow-lg font-semibold z-50 animate-bounce">
-            {notification}
+          <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-bounce-short">
+            <div className={`backdrop-blur-md px-6 py-3 rounded-full font-bold shadow-xl border flex items-center gap-2 ${notification.type === 'error'
+                ? 'bg-rose-500/90 text-white border-rose-400'
+                : 'bg-emerald-500/90 text-white border-emerald-400'
+              }`}>
+              {notification.type === 'error' ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
+              {notification.message}
+            </div>
           </div>
         )}
 
@@ -503,17 +538,27 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 <span className="text-sm text-slate-700 font-bold">👤 {user?.full_name || user?.username}</span>
               </button>
             )}
+            {user?.role === 'admin' && (
+              <button
+                onClick={() => navigate('/admin')}
+                className="relative flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 hover:border-indigo-400 px-5 py-2.5 rounded-2xl font-bold text-indigo-700 hover:text-indigo-800 hover:bg-gradient-to-r hover:from-indigo-100 hover:to-blue-100 transition-all shadow-sm hover:shadow-md"
+              >
+                <span>⚙️ Admin Panel</span>
+              </button>
+            )}
             <button
               onClick={() => navigate('/information')}
               className="relative flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-400 px-5 py-2.5 rounded-2xl font-bold text-purple-700 hover:text-purple-800 hover:bg-gradient-to-r hover:from-purple-100 hover:to-pink-100 transition-all shadow-sm hover:shadow-md"
             >
-              <span>📰 Info & Promo</span>
+              <Newspaper size={18} />
+              <span>Info & Promo</span>
             </button>
             <button
               onClick={() => setIsCartOpen(true)}
               className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
             >
-              <span>🛒 Keranjang</span>
+              <ShoppingCart size={18} />
+              <span>Keranjang</span>
               {cartItemCount > 0 && (
                 <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
                   {cartItemCount}
@@ -523,9 +568,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
             {user ? (
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-5 py-2.5 rounded-2xl font-bold text-rose-700 hover:text-rose-800 hover:border-rose-400 hover:bg-rose-100 transition-all"
+                className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-5 py-2.5 rounded-2xl font-bold text-rose-700 hover:text-rose-800 hover:border-rose-400 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md"
               >
-                🚪 Logout
+                <LogOut size={18} />
+                Logout
               </button>
             ) : (
               <button
@@ -587,8 +633,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
                     key={idx}
                     onClick={() => setSelectedCategory(cat)}
                     className={`shrink-0 px-6 py-3 font-semibold rounded-2xl transition-all ${isSelected
-                        ? `bg-gradient-to-r ${colorClass} text-white shadow-lg shadow-emerald-500/30`
-                        : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:shadow-md hover:-translate-y-1'
+                      ? `bg-gradient-to-r ${colorClass} text-white shadow-lg shadow-emerald-500/30`
+                      : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:shadow-md hover:-translate-y-1'
                       }`}
                   >
                     {cat}
@@ -602,7 +648,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
           <div>
             <h2 className="text-xl font-black text-slate-800 mb-6">
               Etalase Produk {selectedCategory !== "Semua" && `- ${selectedCategory}`}
-              <span className="text-sm font-semibold text-slate-500 ml-2">({filteredItems.length} produk)</span>
+              <span className="text-sm font-semibold text-slate-500 ml-2">({String(filteredItems.length || 0)} produk)</span>
             </h2>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
               {filteredItems.length === 0 ? (
@@ -614,15 +660,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 filteredItems.map((item) => (
                   <div
                     key={item.id}
-                    className={`bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group ${
-                      item.stock_quantity === 0 ? 'opacity-50 hover:border-slate-200 hover:shadow-slate-200/30' : ''
-                    }`}
-                    onClick={() => item.stock_quantity > 0 && openProductDetail(item)}
+                    className={`bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group ${item.machine_stock === 0 ? 'opacity-50 hover:border-slate-200 hover:shadow-slate-200/30' : ''
+                      }`}
+                    onClick={() => item.machine_stock > 0 && openProductDetail(item)}
                     title={item.description || item.name}
                   >
 
-                    {/* Kotak Gambar dengan Fallback Emoji */}
-                    <div className="relative w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden">
+                    {/* Kotak Gambar dengan Fallback Icon */}
+                    <div className="relative w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden text-slate-300">
                       {item.image_url ? (
                         <img
                           src={item.image_url}
@@ -634,14 +679,11 @@ function App({ onGoToAdmin, onGoToLogin }) {
                           }}
                         />
                       ) : null}
-                      <span
-                        className={item.image_url ? "hidden" : "flex"}
-                        style={{ width: '100%', height: '100%', alignItems: 'center', justifyContent: 'center' }}
-                      >
-                        🛒
-                      </span>
+                      <div className={item.image_url ? "hidden" : "flex items-center justify-center w-full h-full"}>
+                        <Package size={48} />
+                      </div>
                       {/* Out of Stock Badge */}
-                      {item.stock_quantity === 0 && (
+                      {item.machine_stock === 0 && (
                         <div className="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center">
                           <span className="text-white font-black text-lg bg-red-600 px-4 py-2 rounded-full">HABIS</span>
                         </div>
@@ -649,7 +691,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
                     </div>
 
                     <div className="px-2 flex-1 flex flex-col">
-                      <h3 className="text-sm font-bold text-slate-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
+                      <h3 className="text-sm font-bold text-emerald-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
                       <p className="text-xs text-slate-400 font-mono mb-4">{item.sku}</p>
 
                       {/* Deskripsi singkat */}
@@ -666,9 +708,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
                             </span>
                           </div>
                           <div className="flex flex-col text-right">
-                            <span className="text-xs text-slate-500">Stok</span>
-                            <span className={`text-sm font-black ${item.stock_quantity > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {item.stock_quantity > 0 ? `${item.stock_quantity}` : 'Habis'}
+                            <span className="text-xs text-slate-500">Stok Mesin</span>
+                            <span className={`text-sm font-black ${item.machine_stock > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                              {item.machine_stock > 0 ? `${item.machine_stock}` : 'Habis'}
                             </span>
                           </div>
                         </div>
@@ -677,9 +719,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
                             e.stopPropagation();
                             addToCart(item);
                           }}
-                          disabled={item.stock_quantity === 0}
-                          className="w-full bg-slate-900 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:bg-emerald-500 active:scale-95 transition-all disabled:opacity-30 disabled:hover:bg-slate-900"
+                          disabled={item.machine_stock === 0}
+                          className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:from-emerald-600 hover:to-teal-700 active:scale-95 transition-all disabled:opacity-30 disabled:from-slate-300 disabled:to-slate-300 gap-2 shadow-md shadow-emerald-500/20"
                         >
+                          <ShoppingCart size={16} />
                           + Keranjang
                         </button>
                       </div>
@@ -705,7 +748,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
               <div className="p-6 border-b border-slate-100 flex justify-between items-center">
                 <div>
                   <h2 className="text-xl font-black text-slate-800">Keranjang Anda</h2>
-                  <p className="text-sm text-slate-500 mt-1">{cartItemCount} barang dipilih</p>
+                  <p className="text-sm text-slate-500 mt-1">{String(cartItemCount || 0)} barang dipilih</p>
                 </div>
                 <button
                   onClick={() => setIsCartOpen(false)}
@@ -717,8 +760,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
               <div className="flex-1 overflow-y-auto p-6 space-y-3">
                 {cartItemCount === 0 ? (
-                  <div className="h-full flex flex-col items-center justify-center text-slate-400">
-                    <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-4xl mb-4">🛒</div>
+                  <div className="flex flex-col items-center justify-center py-12 text-slate-400">
+                    <div className="w-24 h-24 bg-slate-50 rounded-full flex items-center justify-center text-slate-300 mb-4">
+                      <ShoppingCart size={48} />
+                    </div>
                     <p className="font-medium">Belum ada barang</p>
                   </div>
                 ) : (
@@ -726,7 +771,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
                     <div key={itemId} className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm">
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-3 flex-1">
-                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-xl shrink-0">📦</div>
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-xl shrink-0 text-slate-400">
+                            <Package size={24} />
+                          </div>
                           <div>
                             <p className="text-sm font-bold text-slate-800">{item.name}</p>
                             <p className="text-xs font-semibold text-emerald-600 mt-0.5">Rp {(item.price || 0).toLocaleString('id-ID')}</p>
@@ -751,7 +798,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
                           >
                             −
                           </button>
-                          <span className="w-8 text-center font-bold text-slate-800">{qty}</span>
+                          <span className="w-8 text-center font-bold text-slate-800">{String(qty || 0)}</span>
                           <button
                             onClick={() => incrementQuantity(parseInt(itemId))}
                             className="w-7 h-7 bg-slate-200 hover:bg-emerald-200 text-slate-700 hover:text-emerald-700 rounded-lg flex items-center justify-center transition-colors text-sm font-bold"
@@ -763,9 +810,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
                     </div>
                   ))
                 )}
-              </div> {/* <-- PERBAIKAN 2: Menutup div area scroll keranjang dengan benar */}
+              </div>
 
-              {/* PERBAIKAN 3: Merapikan wrapper untuk subtotal & tombol checkout */}
+              {/* Wrapper untuk subtotal & tombol checkout */}
               <div className="p-6 bg-white border-t border-slate-200 mt-auto">
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-slate-500 font-medium">Subtotal</span>
@@ -799,11 +846,13 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
             {/* Modal Panel */}
             <div className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4">
-              <h2 className="text-2xl font-black mb-6 text-center"> Pilih Metode Pembayaran</h2>
+              <h2 className="text-2xl font-black mb-6 text-center">Pilih Metode Pembayaran</h2>
 
               {paymentStatus === 'success' && (
                 <div className="text-center py-8">
-                  <p className="text-6xl mb-4 animate-bounce">✅</p>
+                  <div className="text-emerald-500 mb-4 flex justify-center">
+                    <CheckCircle2 size={80} className="animate-bounce" />
+                  </div>
                   <h3 className="text-xl font-black text-emerald-600 mb-2">Pembayaran Berhasil!</h3>
                   <p className="text-slate-600">Silahkan ambil barang Anda dari mesin</p>
                 </div>
@@ -811,8 +860,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
               {paymentStatus === 'failed' && (
                 <div className="text-center py-8">
-                  <p className="text-6xl mb-4">❌</p>
-                  <h3 className="text-xl font-black text-red-600 mb-2">Pembayaran Gagal</h3>
+                  <div className="text-rose-500 mb-4 flex justify-center">
+                    <XCircle size={80} />
+                  </div>
+                  <h3 className="text-xl font-black text-rose-600 mb-2">Pembayaran Gagal</h3>
                   <p className="text-slate-600 mb-6">Silahkan coba metode pembayaran lain</p>
                   <button
                     onClick={() => setPaymentStatus(null)}
@@ -836,8 +887,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
                         key={method.value}
                         onClick={() => setPaymentMethod(method.value)}
                         className={`w-full p-4 rounded-2xl font-bold border-2 transition-all text-left ${paymentMethod === method.value
-                            ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                            : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
+                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
+                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
                           }`}
                       >
                         <div className="flex items-center justify-between">
@@ -855,7 +906,17 @@ function App({ onGoToAdmin, onGoToLogin }) {
                       disabled={isProcessing}
                       className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold text-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30"
                     >
-                      {isProcessing ? '⏳ Memproses...' : '✓ Bayar Sekarang'}
+                      {isProcessing ? (
+                        <>
+                          <Loader2 size={20} className="animate-spin" />
+                          <span>Memproses...</span>
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 size={20} />
+                          <span>Bayar Sekarang</span>
+                        </>
+                      )}
                     </button>
 
                     <button

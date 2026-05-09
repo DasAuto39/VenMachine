@@ -16,8 +16,11 @@ from queries import (
     get_transaction_status,
     get_all_transactions,
     get_user_transactions,
+    get_transaction_items,
     register_user,
     login_user,
+    verify_admin,
+    process_restock,
     get_all_posts,
     get_published_posts,
     create_post,
@@ -68,8 +71,10 @@ class LoginRequest(BaseModel):
 class ItemCreate(BaseModel):
     name: str
     sku: str
+    category: str = 'Lainnya'
     price: float
-    stock_quantity: int
+    machine_stock: int
+    warehouse_stock: int
     location_id: int
     description: str = None
     image_url: str = None
@@ -77,8 +82,10 @@ class ItemCreate(BaseModel):
 class ItemUpdate(BaseModel):
     name: str = None
     sku: str = None
+    category: str = None
     price: float = None
-    stock_quantity: int = None
+    machine_stock: int = None
+    warehouse_stock: int = None
     location_id: int = None
     description: str = None
     image_url: str = None
@@ -179,7 +186,7 @@ async def get_all_items_endpoint():
 @app.post("/api/admin/items")
 async def create_item_endpoint(item: ItemCreate):
     """Create a new item"""
-    return await create_item(item.name, item.sku, item.price, item.stock_quantity, item.location_id, item.description, item.image_url)
+    return await create_item(item.name, item.sku, item.price, item.machine_stock, item.warehouse_stock, item.location_id, item.description, item.image_url, item.category)
 
 # Endpoint 6: Update item
 @app.put("/api/admin/items/{item_id}")
@@ -192,10 +199,14 @@ async def update_item_endpoint(item_id: int, item: ItemUpdate):
         update_kwargs['sku'] = item.sku
     if item.price is not None:
         update_kwargs['price'] = item.price
-    if item.stock_quantity is not None:
-        update_kwargs['stock_quantity'] = item.stock_quantity
+    if item.machine_stock is not None:
+        update_kwargs['machine_stock'] = item.machine_stock
+    if item.warehouse_stock is not None:
+        update_kwargs['warehouse_stock'] = item.warehouse_stock
     if item.location_id is not None:
         update_kwargs['location_id'] = item.location_id
+    if item.category is not None:
+        update_kwargs['category'] = item.category
     if item.description is not None:
         update_kwargs['description'] = item.description
     if item.image_url is not None:
@@ -208,6 +219,12 @@ async def update_item_endpoint(item_id: int, item: ItemUpdate):
 async def delete_item_endpoint(item_id: int):
     """Delete an item"""
     return await delete_item(item_id)
+
+# Endpoint: Restock Item
+@app.post("/api/items/{item_id}/restock")
+async def restock_item_endpoint(item_id: int):
+    """Triggered when ESP32 finishes restocking to move warehouse stock to machine stock"""
+    return await process_restock(item_id)
 
 # ===== ADMIN PAYMENT MANAGEMENT ENDPOINTS =====
 
@@ -222,6 +239,12 @@ async def get_transactions_endpoint(limit: int = 50):
 async def get_user_transactions_endpoint(user_id: int, limit: int = 50):
     """Get all transactions for a specific user"""
     return await get_user_transactions(user_id, limit)
+
+# Endpoint: Get transaction item details
+@app.get("/api/transaction/{transaction_id}/items")
+async def get_transaction_items_endpoint(transaction_id: int):
+    """Get item details for a specific transaction"""
+    return await get_transaction_items(transaction_id)
 
 # ===== INFORMATION POSTS ENDPOINTS =====
 

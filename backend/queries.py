@@ -13,8 +13,9 @@ import re
 
 async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id: int = None) -> Dict:
     """
-    Buat transaction baru ketika customer siap checkout
-    Security: Parameterized query, input validation
+    Buat transaction baru ketika customer siap checkout.
+    Juga menyimpan detail item ke tabel transaction_items.
+    Security: Parameterized query, input validation, DB transaction
     """
     if gate_id not in [1, 2, 3]:
         raise HTTPException(status_code=400, detail="Invalid gate_id")
@@ -34,37 +35,57 @@ async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id:
     transaction_code = f"TRX-GATE{gate_id}-{timestamp}"
     
     async with pool.acquire() as connection:
-        try:
-            # Create transaction (PENDING until payment)
-            expires_at = datetime.utcnow() + timedelta(minutes=5)  # 5 min to pay
-            
-            result = await connection.fetchrow(
-                """
-                INSERT INTO transactions (user_id, transaction_code, gate_id, total_amount, payment_status, expired_at)
-                VALUES ($1, $2, $3, $4, $5, $6)
-                RETURNING id, transaction_code, gate_id, total_amount, payment_status, created_at, expired_at
-                """,
-                user_id, transaction_code, gate_id, total_amount, 'PENDING', expires_at
-            )
-            
-            return {
-                "transaction_id": result['id'],
-                "transaction_code": result['transaction_code'],
-                "gate_id": result['gate_id'],
-                "total_amount": float(result['total_amount']),
-                "payment_status": result['payment_status'],
-                "created_at": result['created_at'].isoformat(),
-                "expires_at": result['expired_at'].isoformat()
-            }
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+        async with connection.transaction():
+            try:
+                # Create transaction (PENDING until payment)
+                expires_at = datetime.utcnow() + timedelta(minutes=5)  # 5 min to pay
+                
+                result = await connection.fetchrow(
+                    """
+                    INSERT INTO transactions (user_id, transaction_code, gate_id, total_amount, payment_status, expired_at)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                    RETURNING id, transaction_code, gate_id, total_amount, payment_status, created_at, expired_at
+                    """,
+                    user_id, transaction_code, gate_id, total_amount, 'PENDING', expires_at
+                )
+                
+                transaction_id = result['id']
+                
+                # Save transaction items detail
+                for item_id_str, cart_item in items_cart.items():
+                    await connection.execute(
+                        """
+                        INSERT INTO transaction_items (transaction_id, item_id, item_name, quantity, unit_price)
+                        VALUES ($1, $2, $3, $4, $5)
+                        """,
+                        transaction_id, int(item_id_str),
+                        cart_item['item']['name'],
+                        cart_item['qty'],
+                        cart_item['item']['price']
+                    )
+                
+                return {
+                    "transaction_id": transaction_id,
+                    "transaction_code": result['transaction_code'],
+                    "gate_id": result['gate_id'],
+                    "total_amount": float(result['total_amount']),
+                    "payment_status": result['payment_status'],
+                    "created_at": result['created_at'].isoformat(),
+                    "expires_at": result['expired_at'].isoformat()
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 async def process_payment(transaction_id: int, payment_method: str) -> Dict:
     """
-    Process payment (DEMO - simulate payment gateway)
-    Security: Parameterized query, payment method validation
+    Process payment (DEMO - simulate payment gateway).
+    On success, atomically decrements stock for all items in the transaction.
+    Security: Parameterized query, payment method validation, DB transaction
     """
+    import random
     pool = DatabasePool.get_pool()
     
     # Validate payment method
@@ -73,66 +94,84 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
         raise HTTPException(status_code=400, detail=f"Invalid payment method. Choose from: {', '.join(valid_methods)}")
     
     async with pool.acquire() as connection:
-        try:
-            # Check transaction exists and not expired
-            transaction = await connection.fetchrow(
-                "SELECT id, total_amount, payment_status, expired_at FROM transactions WHERE id = $1",
-                transaction_id
-            )
-            
-            if not transaction:
-                raise HTTPException(status_code=404, detail="Transaction not found")
-            
-            if transaction['payment_status'] != 'PENDING':
-                raise HTTPException(status_code=400, detail=f"Transaction already {transaction['payment_status'].lower()}")
-            
-            if transaction['expired_at'] < datetime.utcnow():
-                # Mark as expired
-                await connection.execute(
-                    "UPDATE transactions SET payment_status = $1 WHERE id = $2",
-                    'CANCELLED', transaction_id
+        async with connection.transaction():
+            try:
+                # Check transaction exists and not expired
+                transaction = await connection.fetchrow(
+                    "SELECT id, total_amount, payment_status, expired_at FROM transactions WHERE id = $1",
+                    transaction_id
                 )
-                raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
-            
-            # DEMO: Simulate successful payment (90% success rate)
-            import random
-            is_success = random.random() < 0.9
-            
-            payment_code = f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
-            payment_status = 'SUCCESS' if is_success else 'FAILED'
-            
-            # Create payment record
-            payment = await connection.fetchrow(
-                """
-                INSERT INTO payments (transaction_id, payment_method, payment_code, status, paid_at)
-                VALUES ($1, $2, $3, $4, $5)
-                RETURNING id, payment_code, status
-                """,
-                transaction_id, payment_method, payment_code, payment_status, 
-                datetime.utcnow() if is_success else None
-            )
-            
-            # Update transaction status
-            if is_success:
-                await connection.execute(
+                
+                if not transaction:
+                    raise HTTPException(status_code=404, detail="Transaction not found")
+                
+                if transaction['payment_status'] != 'PENDING':
+                    raise HTTPException(status_code=400, detail=f"Transaction already {transaction['payment_status'].lower()}")
+                
+                if transaction['expired_at'] < datetime.utcnow():
+                    await connection.execute(
+                        "UPDATE transactions SET payment_status = $1 WHERE id = $2",
+                        'CANCELLED', transaction_id
+                    )
+                    raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
+                
+                # DEMO: Simulate successful payment (90% success rate)
+                is_success = random.random() < 0.9
+                
+                payment_code = f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
+                payment_status = 'SUCCESS' if is_success else 'FAILED'
+                
+                # Create payment record
+                payment = await connection.fetchrow(
                     """
-                    UPDATE transactions 
-                    SET payment_status = $1, paid_at = NOW()
-                    WHERE id = $2
+                    INSERT INTO payments (transaction_id, payment_method, payment_code, status, paid_at)
+                    VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id, payment_code, status
                     """,
-                    'PAID', transaction_id
+                    transaction_id, payment_method, payment_code, payment_status, 
+                    datetime.utcnow() if is_success else None
                 )
-            
-            return {
-                "payment_id": payment['id'],
-                "payment_code": payment['payment_code'],
-                "status": payment_status,
-                "message": "Pembayaran berhasil!" if is_success else "Pembayaran gagal, silahkan coba lagi"
-            }
-        except HTTPException:
-            raise
-        except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+                
+                # If payment successful: update transaction + decrement stock atomically
+                dispensed_items = []
+                if is_success:
+                    await connection.execute(
+                        "UPDATE transactions SET payment_status = $1, paid_at = NOW() WHERE id = $2",
+                        'PAID', transaction_id
+                    )
+                    
+                    # Get items from this transaction and decrement stock
+                    tx_items = await connection.fetch(
+                        "SELECT item_id, quantity FROM transaction_items WHERE transaction_id = $1",
+                        transaction_id
+                    )
+                    for tx_item in tx_items:
+                        result = await connection.fetchrow(
+                            "UPDATE items SET machine_stock = machine_stock - $1, updated_at = NOW() WHERE id = $2 RETURNING machine_stock, location_id",
+                            tx_item['quantity'], tx_item['item_id']
+                        )
+                        dispensed_items.append({
+                            "item_id": tx_item['item_id'],
+                            "remaining_machine_stock": result['machine_stock'],
+                            "location_id": result['location_id']
+                        })
+                        # Log dispense
+                        await connection.execute(
+                            "INSERT INTO dispense_logs (item_id, requested_qty, source, status) VALUES ($1, $2, $3, $4)",
+                            tx_item['item_id'], tx_item['quantity'], 'WEB', 'SUCCESS'
+                        )
+                
+                return {
+                    "payment_id": payment['id'],
+                    "payment_code": payment['payment_code'],
+                    "status": payment_status,
+                    "message": "Pembayaran berhasil!" if is_success else "Pembayaran gagal, silahkan coba lagi",
+                    "dispensed_items": dispensed_items
+                }
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
 
 
 async def get_transaction_status(transaction_id: int) -> Dict:
@@ -280,10 +319,9 @@ async def get_available_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, s.row_position, s.location_code 
+            SELECT i.id, i.name, i.sku, i.category, i.price, i.machine_stock, i.warehouse_stock, i.description, i.image_url, s.row_position, s.location_code 
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
-            --WHERE i.stock_quantity > 0
             ORDER BY i.name
         """
         rows = await connection.fetch(query)
@@ -306,24 +344,24 @@ async def dispense_item(item_id: int, requested_qty: int) -> Dict:
         try:
             # Cek stock tersedia (parameterized)
             item = await connection.fetchrow(
-                "SELECT stock_quantity, name FROM items WHERE id = $1",
+                "SELECT machine_stock, name FROM items WHERE id = $1",
                 item_id
             )
             
             if not item:
                 raise HTTPException(status_code=404, detail="Item not found")
             
-            if item['stock_quantity'] < requested_qty:
-                raise HTTPException(status_code=400, detail="Stok tidak cukup")
+            if item['machine_stock'] < requested_qty:
+                raise HTTPException(status_code=400, detail=f"Insufficient machine stock for {item['name']}")
             
-            # Decrement stock (parameterized)
+            # Decrement stock
             result = await connection.fetchrow(
                 """
                 UPDATE items 
-                SET stock_quantity = stock_quantity - $1,
+                SET machine_stock = machine_stock - $1,
                     updated_at = NOW()
                 WHERE id = $2
-                RETURNING id, name, stock_quantity
+                RETURNING id, name, machine_stock
                 """,
                 requested_qty, item_id
             )
@@ -340,8 +378,8 @@ async def dispense_item(item_id: int, requested_qty: int) -> Dict:
             
             return {
                 "message": f"Berhasil ambil {requested_qty}x {result['name']}", 
-                "transaction_id": log_result['id'],
-                "new_stock": result['stock_quantity']
+                "item_name": result['name'],
+                "new_machine_stock": result['machine_stock']
             }
         except HTTPException:
             raise
@@ -359,7 +397,7 @@ async def get_all_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.price, i.stock_quantity, i.description, i.image_url, i.location_id, s.row_position, s.location_code
+            SELECT i.id, i.name, i.sku, i.category, i.price, i.machine_stock, i.warehouse_stock, i.description, i.image_url, i.location_id, s.row_position, s.location_code
             FROM items i
             LEFT JOIN storage_locations s ON i.location_id = s.id
             ORDER BY i.id
@@ -368,7 +406,7 @@ async def get_all_items() -> List[Dict]:
         return [dict(row) for row in rows]
 
 
-async def create_item(name: str, sku: str, price: float, stock_quantity: int, location_id: int, description: str = None, image_url: str = None) -> Dict:
+async def create_item(name: str, sku: str, price: float, machine_stock: int, warehouse_stock: int, location_id: int, description: str = None, image_url: str = None, category: str = 'Lainnya') -> Dict:
     """
     Tambah produk baru
     Security: Parameterized query, input validation
@@ -382,22 +420,26 @@ async def create_item(name: str, sku: str, price: float, stock_quantity: int, lo
         raise HTTPException(status_code=400, detail="Invalid SKU")
     if price < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
-    if stock_quantity < 0:
-        raise HTTPException(status_code=400, detail="Stock cannot be negative")
+    if machine_stock < 0 or machine_stock > 10:
+        raise HTTPException(status_code=400, detail="Machine stock must be between 0 and 10")
+    if warehouse_stock < 0:
+        raise HTTPException(status_code=400, detail="Warehouse stock cannot be negative")
     if description and len(description) > 500:
         raise HTTPException(status_code=400, detail="Description too long (max 500 chars)")
     if image_url and len(image_url) > 500:
         raise HTTPException(status_code=400, detail="Image URL too long (max 500 chars)")
+    if category and len(category) > 50:
+        raise HTTPException(status_code=400, detail="Category too long (max 50 chars)")
     
     async with pool.acquire() as connection:
         try:
             result = await connection.fetchrow(
                 """
-                INSERT INTO items (name, sku, price, stock_quantity, location_id, description, image_url)
-                VALUES ($1, $2, $3, $4, $5, $6, $7)
-                RETURNING id, name, sku, price, stock_quantity, location_id, description, image_url
+                INSERT INTO items (name, sku, category, price, machine_stock, warehouse_stock, location_id, description, image_url)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                RETURNING id, name, sku, category, price, machine_stock, warehouse_stock, location_id, description, image_url
                 """,
-                name, sku, price, stock_quantity, location_id, description, image_url
+                name, sku, category, price, machine_stock, warehouse_stock, location_id, description, image_url
             )
             return dict(result)
         except asyncpg.UniqueViolationError:
@@ -414,7 +456,7 @@ async def update_item(item_id: int, **kwargs) -> Dict:
     pool = DatabasePool.get_pool()
     
     # Whitelist fields yang boleh di-update
-    allowed_fields = {'name', 'sku', 'price', 'stock_quantity', 'location_id', 'description', 'image_url'}
+    allowed_fields = {'name', 'sku', 'category', 'price', 'machine_stock', 'warehouse_stock', 'location_id', 'description', 'image_url'}
     updates = {k: v for k, v in kwargs.items() if k in allowed_fields and v is not None}
     
     if not updates:
@@ -427,8 +469,10 @@ async def update_item(item_id: int, **kwargs) -> Dict:
         raise HTTPException(status_code=400, detail="Invalid SKU")
     if 'price' in updates and updates['price'] < 0:
         raise HTTPException(status_code=400, detail="Price cannot be negative")
-    if 'stock_quantity' in updates and updates['stock_quantity'] < 0:
-        raise HTTPException(status_code=400, detail="Stock cannot be negative")
+    if 'machine_stock' in updates and (updates['machine_stock'] < 0 or updates['machine_stock'] > 10):
+        raise HTTPException(status_code=400, detail="Machine stock must be between 0 and 10")
+    if 'warehouse_stock' in updates and updates['warehouse_stock'] < 0:
+        raise HTTPException(status_code=400, detail="Warehouse stock cannot be negative")
     if 'description' in updates and len(updates.get('description', '')) > 500:
         raise HTTPException(status_code=400, detail="Description too long (max 500 chars)")
     if 'image_url' in updates and len(updates.get('image_url', '')) > 500:
@@ -454,7 +498,7 @@ async def update_item(item_id: int, **kwargs) -> Dict:
                 UPDATE items
                 SET {', '.join(set_clauses)}
                 WHERE id = ${counter}
-                RETURNING id, name, sku, price, stock_quantity, location_id, description, image_url
+                RETURNING id, name, sku, category, price, machine_stock, warehouse_stock, location_id, description, image_url
             """
             
             result = await connection.fetchrow(query, *values)
@@ -624,7 +668,7 @@ async def login_user(username: str, password: str) -> Dict:
         try:
             # Get user by username
             user = await connection.fetchrow(
-                "SELECT id, username, email, password_hash, full_name, is_active FROM users WHERE username = $1",
+                "SELECT id, username, email, password_hash, full_name, role, is_active FROM users WHERE username = $1",
                 username
             )
             
@@ -644,6 +688,7 @@ async def login_user(username: str, password: str) -> Dict:
                 "username": user['username'],
                 "email": user['email'],
                 "full_name": user['full_name'],
+                "role": user['role'] or 'user',
                 "message": "Login successful"
             }
         except HTTPException:
@@ -772,3 +817,82 @@ async def delete_post(post_id: int) -> Dict:
             return {"message": "Post deleted successfully", "id": post_id}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+# ===== TRANSACTION ITEMS QUERY =====
+
+async def get_transaction_items(transaction_id: int) -> List[Dict]:
+    """Get item details for a specific transaction"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        rows = await connection.fetch(
+            """
+            SELECT ti.item_name, ti.quantity, ti.unit_price
+            FROM transaction_items ti
+            WHERE ti.transaction_id = $1
+            ORDER BY ti.id
+            """,
+            transaction_id
+        )
+        return [dict(row) for row in rows]
+
+
+# ===== ADMIN VERIFICATION =====
+
+async def verify_admin(user_id: int) -> bool:
+    """Check if a user has admin role"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        user = await connection.fetchrow(
+            "SELECT role FROM users WHERE id = $1 AND is_active = TRUE",
+            user_id
+        )
+        return user and user['role'] == 'admin'
+
+# ===== RESTOCK PROCESS =====
+async def process_restock(item_id: int) -> Dict:
+    """Move stock from warehouse to machine up to max of 10"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        async with connection.transaction():
+            item = await connection.fetchrow(
+                "SELECT id, machine_stock, warehouse_stock FROM items WHERE id = $1",
+                item_id
+            )
+            
+            if not item:
+                raise HTTPException(status_code=404, detail="Item not found")
+                
+            machine_stock = item['machine_stock']
+            warehouse_stock = item['warehouse_stock']
+            
+            # Hitung jumlah yang bisa direstock
+            needed = 10 - machine_stock
+            if needed <= 0:
+                return {"message": "Machine is already full", "restocked_amount": 0}
+                
+            amount_to_move = min(needed, warehouse_stock)
+            if amount_to_move <= 0:
+                return {"message": "No warehouse stock available", "restocked_amount": 0}
+                
+            # Update DB
+            result = await connection.fetchrow(
+                """
+                UPDATE items 
+                SET machine_stock = machine_stock + $1,
+                    warehouse_stock = warehouse_stock - $1,
+                    updated_at = NOW()
+                WHERE id = $2
+                RETURNING id, machine_stock, warehouse_stock
+                """,
+                amount_to_move, item_id
+            )
+            
+            return {
+                "message": f"Successfully restocked {amount_to_move} items",
+                "item_id": result['id'],
+                "new_machine_stock": result['machine_stock'],
+                "new_warehouse_stock": result['warehouse_stock'],
+                "restocked_amount": amount_to_move
+            }
+

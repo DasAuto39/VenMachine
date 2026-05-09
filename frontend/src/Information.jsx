@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
+import { ArrowLeft, Newspaper, Tag } from 'lucide-react';
 
 function Information() {
   const navigate = useNavigate();
@@ -59,7 +60,8 @@ function Information() {
               }}
               className="flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
             >
-              ← Kembali Belanja
+              <ArrowLeft size={18} />
+              Kembali Belanja
             </button>
           </div>
         </header>
@@ -77,7 +79,9 @@ function Information() {
             </div>
           ) : posts.length === 0 ? (
             <div className="bg-white/80 backdrop-blur-md rounded-3xl p-12 text-center shadow-xl shadow-emerald-600/10 border border-white/40">
-              <div className="text-6xl mb-4">📰</div>
+              <div className="flex justify-center mb-4">
+                <Newspaper size={64} className="text-emerald-200" />
+              </div>
               <h2 className="text-2xl font-black text-slate-800 mb-2">Belum ada informasi</h2>
               <p className="text-slate-500">Nantikan update terbaru dari FreshMart segera!</p>
             </div>
@@ -109,7 +113,7 @@ function Information() {
                     
                     {post.item_name && (
                       <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl">
-                        <span className="text-xl">🏷️</span>
+                        <Tag size={18} className="text-emerald-500" />
                         <span className="text-sm font-bold text-slate-700">Terkait Produk: {post.item_name}</span>
                       </div>
                     )}

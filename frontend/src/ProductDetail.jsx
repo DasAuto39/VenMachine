@@ -58,10 +58,10 @@ function ProductDetail({ product, isOpen, onClose, onAddToCart }) {
                   Rp {(product.price || 0).toLocaleString('id-ID')}
                 </p>
               </div>
-              <div className={`rounded-2xl p-4 text-center ${product.stock_quantity > 5 ? 'bg-emerald-50' : product.stock_quantity > 0 ? 'bg-yellow-50' : 'bg-red-50'}`}>
-                <p className="text-xs text-slate-600 font-semibold mb-1">Stok</p>
-                <p className={`text-lg font-black ${product.stock_quantity > 5 ? 'text-emerald-600' : product.stock_quantity > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
-                  {product.stock_quantity > 0 ? `${product.stock_quantity}× Ada` : 'Habis'}
+              <div className={`rounded-2xl p-4 text-center ${product.machine_stock > 5 ? 'bg-emerald-50' : product.machine_stock > 0 ? 'bg-yellow-50' : 'bg-red-50'}`}>
+                <p className="text-xs text-slate-600 font-semibold mb-1">Stok Mesin</p>
+                <p className={`text-lg font-black ${product.machine_stock > 5 ? 'text-emerald-600' : product.machine_stock > 0 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {product.machine_stock > 0 ? `${product.machine_stock}× Ada` : 'Habis'}
                 </p>
               </div>
               <div className="bg-slate-100 rounded-2xl p-4 text-center">
@@ -87,7 +87,7 @@ function ProductDetail({ product, isOpen, onClose, onAddToCart }) {
                 onAddToCart();
                 onClose();
               }}
-              disabled={product.stock_quantity === 0}
+              disabled={product.machine_stock === 0}
               className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-2xl font-bold py-3 hover:shadow-lg hover:shadow-emerald-500/30 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-lg"
             >
               Tambah ke Keranjang

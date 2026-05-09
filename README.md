@@ -1,54 +1,153 @@
 # VenMachine - Smart Automated Vending Machine System
 
-## What is This Project?
+Proyek ini adalah implementasi *Smart Vending Machine* berbasis Web dan IoT yang memungkinkan pelanggan berbelanja menggunakan antarmuka web interaktif dengan sistem pengelolaan stok 2 tingkat (Gudang & Mesin), dan diintegrasikan secara *real-time* ke mikrokontroler (ESP32) menggunakan **protokol MQTT**.
 
-So basically, we're building an automated vending machine that can serve three customers at the same time. Think of it like a typical vending machine you'd find in a mall, but way smarter. Instead of just pressing buttons, customers scan a QR code at their gate, and boom - they get redirected to a web interface where they can browse products and pay. Once they complete the payment, the system automatically tells the machine to dispense their items from the designated gate.
+Tujuan dari dokumen ini adalah sebagai panduan teknis bagi seluruh anggota tim untuk memahami bagaimana alur komunikasi Web ↔ API ↔ ESP32 bekerja.
 
-## How It Works
+---
 
-Here's the flow:
+## 🏛️ Arsitektur Sistem & Alur Kerja
 
-1. **Customer Scans QR Code** - A customer walks up to one of the three gates and scans the unique QR code linked to that gate
-2. **Web Interface Opens** - They get directed to the shopping page with their specific gate ID registered in the session
-3. **Browse & Select Products** - They can filter by category, search for items, and add whatever they want to the cart
-4. **Payment & Checkout** - The system handles payment processing (we're planning QRIS integration later)
-5. **Machine Dispenses** - Once payment is confirmed, the system sends a signal to the controller (Raspberry Pi/MPU) to activate the motor and dispense the items from that specific gate
-6. **Next Customer** - While one customer is getting their items, another person can be shopping at a different gate
+Sistem ini terdiri dari 3 komponen utama yang saling berkomunikasi:
+1. **Frontend (React.js)**: Antarmuka UI pelanggan dan Admin.
+2. **Backend (FastAPI)**: Pusat logika bisnis dan manipulasi *Database* (PostgreSQL).
+3. **Perangkat Keras (ESP32)**: Menggerakkan motor *vending* dan sensor stok.
 
-The cool part is that all three gates work independently, so three people can shop and receive their orders at the same time without waiting.
+**Alur Kerja Utama (Berbelanja & Restock):**
+1. Pembeli mengakses web via kode QR per-gate (`/user?gate=gate_1`).
+2. Pembeli memilih barang dan melakukan pembayaran.
+3. Web mengirim perintah MQTT ke mesin untuk mengeluarkan barang (Dispense).
+4. Jika stok yang ada di mesin kurang dari 2, web/ESP32 akan mengirim sinyal restock.
+5. ESP32 memindahkan stok fisik dari gudang mesin ke etalase depan.
+6. ESP32 melapor via MQTT ke Web bahwa restock berhasil.
+7. Web memanggil API Backend untuk memindahkan angka `warehouse_stock` ke `machine_stock` secara otomatis di database.
 
-## Tech Stack
+---
 
-- **Frontend**: React with Tailwind CSS - responsive web interface for shopping and checkout
-- **Backend**: FastAPI - handles all the business logic, payment processing, and communication with the vending machine
-- **Database**: PostgreSQL - stores product inventory, transaction logs, and machine location data
-- **Hardware Integration**: Controllers (Raspberry Pi/MPU) - receives commands to control the motors and dispense products
-- **Containerization**: Docker Compose - makes deployment clean and consistent
+## 📦 Sistem Inventaris 2 Tingkat (Two-Tier Stock)
 
-## Project Structure
+Untuk mensimulasikan penyimpanan pada *vending machine* berukuran besar, stok produk dipisah menjadi dua kolom pada database tabel `items`:
 
-```
-VenMachine/
-├── backend/          # FastAPI server with parameterized queries for security
-├── frontend/         # React app for the shopping interface
-├── docker-compose.yml # Container orchestration
-└── database schema   # PostgreSQL tables for items, locations, and logs
-```
+*   **`machine_stock`**: Stok yang saat ini **terpajang di etalase** *vending machine* dan siap dibeli. (Kapasitas maksimal: **10** per produk).
+*   **`warehouse_stock`**: Stok cadangan yang tersimpan **di ruang penyimpanan** (gudang/belakang mesin). 
 
-## Features
+Jika `machine_stock` menipis, mesin akan secara otomatis mengisi ulang dari `warehouse_stock`. Pembeli **hanya** bisa membeli barang selama `machine_stock` > 0.
 
-- Real-time inventory management
-- Secure payment handling (integrating QRIS soon)
-- Gate-based product delivery system
-- Mobile-optimized shopping interface
-- Category filtering and product search
-- Transaction logging for analytics
-- Professional dashboard for admin management
+---
 
-## Current Status
+## 📡 Komunikasi MQTT (Web ↔ ESP32)
 
-We've got the core shopping system working, secure database operations in place, and the UI looking clean. Next up is integrating real payment processing with QRIS and testing the actual hardware communication with the controller.
+Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainkan menggunakan perantara **Broker MQTT** (misalnya HiveMQ) agar sistem bisa berjalan *asynchronous* dan *real-time*.
 
-## Team Project
+### 1. Perintah Keluarkan Barang / Dispense (Web → ESP32)
+Saat pelanggan selesai membayar, Web akan mem-publish perintah ke mesin.
 
-This is a capstone project we're working on as a team, so it's a full-stack implementation from hardware integration to web development. The goal is to have a fully functional, production-ready vending machine system by the end of the semester. 
+*   **Topic**: `vending/{machineId}/cmd`  *(Contoh: `vending/VM001/cmd` untuk Gate 1)*
+*   **Arah**: Web/Frontend 👉 ESP32
+*   **Payload JSON**:
+    ```json
+    {
+      "command": "DISPENSE",
+      "item_id": 1,
+      "location_id": "ROW1",
+      "quantity": 1
+    }
+    ```
+
+### 2. Perintah Isi Ulang / Restock (Web → ESP32)
+Jika setelah pembayaran `machine_stock` turun di bawah 2 unit, Web akan memerintahkan ESP32 untuk memindahkan barang dari belakang ke depan.
+
+*   **Topic**: `vending/{machineId}/cmd`
+*   **Arah**: Web/Frontend 👉 ESP32
+*   **Payload JSON**:
+    ```json
+    {
+      "command": "RESTOCK",
+      "item_id": 1,
+      "location_id": 3
+    }
+    ```
+
+### 3. Konfirmasi Isi Ulang Selesai (ESP32 → Web)
+Setelah motor pada ESP32 selesai memindahkan barang ke depan secara fisik, ESP32 **WAJIB** melapor balik ke Web agar tampilan stok di layar dan di database di-update.
+
+*   **Topic**: `vending/{machineId}/status`
+*   **Arah**: ESP32 👉 Web/Frontend
+*   **Payload JSON**:
+    ```json
+    {
+      "status": "RESTOCK_DONE",
+      "item_id": 1
+    }
+    ```
+
+> **Catatan untuk tim Hardware (ESP32):** ESP32 bebas melakukan *restock* secara mandiri (misal: jika mendeteksi barang habis lewat sensor infrared) tanpa harus menunggu perintah `RESTOCK` dari web. Web akan selalu *listen* (mendengarkan) status `RESTOCK_DONE` dan segera mengupdate database ketika pesan tersebut diterima.
+
+---
+
+## 🔌 Dokumentasi API Utama (FastAPI)
+
+Semua *endpoint* API berjalan pada basis URL `http://localhost:8000`. Berikut adalah endpoint kunci untuk pengembangan:
+
+### 1. Proses Pembayaran
+*   **Endpoint:** `POST /api/payment`
+*   **Fungsi:** Mengurangi `machine_stock` dan membuat catatan log transaksi.
+*   **Payload Request:**
+    ```json
+    {
+      "items": [
+        {"item_id": 1, "quantity": 1, "price": 15000}
+      ],
+      "total_amount": 15000,
+      "payment_method": "QRIS",
+      "gate": "gate_1"
+    }
+    ```
+*   **Response (Penting):** Mengembalikan data `dispensed_items` yang memuat sisa `remaining_machine_stock` terbaru. Angka inilah yang memicu web mengirim sinyal MQTT `RESTOCK` jika nilainya < 2.
+
+### 2. Sinkronisasi Database Restock (Internal)
+*   **Endpoint:** `POST /api/items/{item_id}/restock`
+*   **Fungsi:** Memindahkan nilai `warehouse_stock` ke `machine_stock` secara atomik di database (hingga mesin kembali penuh maksimal 10).
+*   **Trigger:** Otomatis dipanggil oleh Frontend React seketika setelah menerima pesan MQTT `RESTOCK_DONE` dari ESP32. Tidak perlu parameter JSON *body*.
+
+### 3. Mendapatkan Daftar Produk
+*   **Endpoint:** `GET /api/items`
+*   **Response:**
+    ```json
+    [
+      {
+        "id": 1,
+        "name": "Wortel Premium",
+        "price": 15000,
+        "machine_stock": 10,
+        "warehouse_stock": 30,
+        "location_code": "ROW1"
+      }
+    ]
+    ```
+
+---
+
+## 🚀 Cara Menjalankan Project Secara Lokal
+
+Sistem ini telah dibungkus sepenuhnya menggunakan **Docker** sehingga meminimalisir masalah *environment*.
+
+1. Pastikan **Docker** dan **Docker Compose** telah terpasang.
+2. Buka terminal di dalam *root folder* proyek `VenMachine/`.
+3. Jika ini pertama kali dijalankan, atau jika Anda baru saja merubah skema struktur *database* di `db.sql`, jalankan:
+   ```bash
+   sudo docker compose down -v
+   sudo docker compose up -d --build
+   ```
+4. Jika hanya ingin mematikan dan menghidupkan tanpa menghapus data (*restart* harian):
+   ```bash
+   sudo docker compose stop
+   sudo docker compose start
+   ```
+
+**Akses Lokal:**
+*   Frontend (Web): `http://localhost:5173`
+*   Backend API (Swagger Docs): `http://localhost:8000/docs`
+
+---
+*Dokumentasi ini akan terus diperbarui sejalan dengan perkembangan integrasi Hardware-ke-Software tim capstone.*

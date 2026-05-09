@@ -1,5 +1,20 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  BarChart, 
+  Package, 
+  Settings, 
+  LogOut, 
+  Edit, 
+  Trash2, 
+  Plus, 
+  Image as ImageIcon,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ChevronDown,
+  ChevronUp
+} from 'lucide-react';
 
 function Admin() {
   const navigate = useNavigate();
@@ -11,10 +26,16 @@ function Admin() {
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
+    category: 'Lainnya',
     price: '',
-    stock_quantity: '',
+    machine_stock: '',
+    warehouse_stock: '',
     location_id: ''
   });
+
+  // Expandable transaction details state
+  const [expandedTx, setExpandedTx] = useState(null);
+  const [txItems, setTxItems] = useState({});
 
   // Posts state
   const [posts, setPosts] = useState([]);
@@ -30,6 +51,28 @@ function Admin() {
 
   // Fetch all items and transactions
   useEffect(() => {
+    // Role verification
+    const storedUser = localStorage.getItem('user');
+    const authenticated = localStorage.getItem('authenticated');
+    
+    if (!storedUser || authenticated !== 'true') {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      const user = JSON.parse(storedUser);
+      if (user.role !== 'admin') {
+        alert('Akses Ditolak: Halaman ini khusus untuk Admin.');
+        navigate('/user');
+        return;
+      }
+    } catch (err) {
+      console.error('Error parsing stored user:', err);
+      navigate('/login');
+      return;
+    }
+
     fetchItems();
     fetchTransactions();
     fetchPosts();
@@ -37,7 +80,7 @@ function Admin() {
     // Refresh transactions every 10 seconds
     const interval = setInterval(fetchTransactions, 10000);
     return () => clearInterval(interval);
-  }, []);
+  }, [navigate]);
 
   const fetchItems = async () => {
     try {
@@ -69,18 +112,38 @@ function Admin() {
     }
   };
 
+  const toggleTransactionDetail = async (txId) => {
+    if (expandedTx === txId) {
+      setExpandedTx(null);
+      return;
+    }
+    setExpandedTx(txId);
+    // Fetch items if not already cached
+    if (!txItems[txId]) {
+      try {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transaction/${txId}/items`);
+        if (res.ok) {
+          const data = await res.json();
+          setTxItems(prev => ({ ...prev, [txId]: data }));
+        }
+      } catch (err) {
+        console.error('Error fetching transaction items:', err);
+      }
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'price' || name === 'stock_quantity' || name === 'location_id' ? parseFloat(value) || '' : value
+      [name]: name === 'price' || name === 'machine_stock' || name === 'warehouse_stock' || name === 'location_id' ? parseFloat(value) || '' : value
     }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    if (!formData.name || !formData.sku || !formData.price || formData.stock_quantity === '' || !formData.location_id) {
+    if (!formData.name || !formData.sku || !formData.price || formData.machine_stock === '' || formData.warehouse_stock === '' || !formData.location_id) {
       alert("Semua field harus diisi!");
       return;
     }
@@ -109,7 +172,7 @@ function Admin() {
         }
       }
       
-      setFormData({ name: '', sku: '', price: '', stock_quantity: '', location_id: '' });
+      setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '' });
       setShowForm(false);
       fetchItems();
     } catch (err) {
@@ -122,8 +185,10 @@ function Admin() {
     setFormData({
       name: item.name,
       sku: item.sku,
+      category: item.category || 'Lainnya',
       price: item.price,
-      stock_quantity: item.stock_quantity,
+      machine_stock: item.machine_stock,
+      warehouse_stock: item.warehouse_stock,
       location_id: item.location_id
     });
     setEditingId(item.id);
@@ -149,7 +214,7 @@ function Admin() {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
-    setFormData({ name: '', sku: '', price: '', stock_quantity: '', location_id: '' });
+    setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '' });
   };
 
   const handlePostInputChange = (e) => {
@@ -335,6 +400,24 @@ function Admin() {
                 </div>
 
                 <div>
+                  <label className="block text-sm font-semibold mb-1">Kategori</label>
+                  <select
+                    name="category"
+                    value={formData.category}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                  >
+                    <option value="Sayuran">Sayuran</option>
+                    <option value="Buah">Buah</option>
+                    <option value="Bahan Pokok">Bahan Pokok</option>
+                    <option value="Minuman">Minuman</option>
+                    <option value="Snack">Snack</option>
+                    <option value="Daging">Daging</option>
+                    <option value="Lainnya">Lainnya</option>
+                  </select>
+                </div>
+
+                <div>
                   <label className="block text-sm font-semibold mb-1">Harga (Rp)</label>
                   <input
                     type="number"
@@ -346,16 +429,32 @@ function Admin() {
                   />
                 </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Stok</label>
-                  <input
-                    type="number"
-                    name="stock_quantity"
-                    value={formData.stock_quantity}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="50"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Stok Mesin (Maks 10)</label>
+                    <input
+                      type="number"
+                      name="machine_stock"
+                      value={formData.machine_stock}
+                      onChange={handleInputChange}
+                      min="0"
+                      max="10"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold mb-1">Stok Gudang</label>
+                    <input
+                      type="number"
+                      name="warehouse_stock"
+                      value={formData.warehouse_stock}
+                      onChange={handleInputChange}
+                      min="0"
+                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                      placeholder="40"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -399,8 +498,10 @@ function Admin() {
                   <th className="px-6 py-4 text-left font-bold text-slate-700">ID</th>
                   <th className="px-6 py-4 text-left font-bold text-slate-700">Nama Produk</th>
                   <th className="px-6 py-4 text-left font-bold text-slate-700">SKU</th>
+                  <th className="px-6 py-4 text-left font-bold text-slate-700">Kategori</th>
                   <th className="px-6 py-4 text-right font-bold text-slate-700">Harga</th>
-                  <th className="px-6 py-4 text-right font-bold text-slate-700">Stok</th>
+                  <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Mesin</th>
+                  <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Gudang</th>
                   <th className="px-6 py-4 text-center font-bold text-slate-700">Rak</th>
                   <th className="px-6 py-4 text-center font-bold text-slate-700">Aksi</th>
                 </tr>
@@ -411,13 +512,19 @@ function Admin() {
                     <td className="px-6 py-4 text-slate-700 font-semibold">{item.id}</td>
                     <td className="px-6 py-4 text-slate-700 font-semibold">{item.name}</td>
                     <td className="px-6 py-4 text-slate-600 font-mono">{item.sku}</td>
+                    <td className="px-6 py-4">
+                      <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">{item.category || 'Lainnya'}</span>
+                    </td>
                     <td className="px-6 py-4 text-right text-emerald-600 font-bold">
                       Rp {(item.price || 0).toLocaleString('id-ID')}
                     </td>
                     <td className="px-6 py-4 text-right font-bold">
-                      <span className={item.stock_quantity > 0 ? 'text-emerald-600' : 'text-rose-600'}>
-                        {item.stock_quantity}
+                      <span className={`px-2 py-1 rounded-lg ${item.machine_stock <= 2 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                        {String(item.machine_stock || 0)}
                       </span>
+                    </td>
+                    <td className="px-6 py-4 text-right font-bold text-slate-700">
+                      {String(item.warehouse_stock || 0)}
                     </td>
                     <td className="px-6 py-4 text-center text-slate-600 font-semibold">
                       {item.location_code || '-'}
@@ -459,13 +566,13 @@ function Admin() {
           <div className="bg-emerald-50 rounded-2xl p-6 border-2 border-emerald-200">
             <p className="text-emerald-600 font-semibold mb-2">Total Stok</p>
             <p className="text-3xl font-black text-emerald-700">
-              {items.reduce((sum, item) => sum + item.stock_quantity, 0)}
+              {items.reduce((sum, item) => sum + (item.machine_stock || 0) + (item.warehouse_stock || 0), 0)}
             </p>
           </div>
           <div className="bg-rose-50 rounded-2xl p-6 border-2 border-rose-200">
             <p className="text-rose-600 font-semibold mb-2">Produk Habis</p>
             <p className="text-3xl font-black text-rose-700">
-              {items.filter(item => item.stock_quantity === 0).length}
+              {items.filter(item => (item.machine_stock || 0) === 0 && (item.warehouse_stock || 0) === 0).length}
             </p>
           </div>
         </div>
@@ -487,6 +594,7 @@ function Admin() {
                   <table className="w-full">
                     <thead>
                       <tr className="bg-slate-100 border-b border-slate-200">
+                        <th className="px-6 py-4 text-left font-bold text-slate-700 w-10"></th>
                         <th className="px-6 py-4 text-left font-bold text-slate-700">ID Transaksi</th>
                         <th className="px-6 py-4 text-left font-bold text-slate-700">Gate</th>
                         <th className="px-6 py-4 text-right font-bold text-slate-700">Jumlah</th>
@@ -497,32 +605,74 @@ function Admin() {
                     </thead>
                     <tbody>
                       {transactions.map((tx) => (
-                        <tr key={tx.transaction_id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                          <td className="px-6 py-4 text-slate-700 font-mono text-sm">{tx.transaction_code}</td>
-                          <td className="px-6 py-4 text-slate-700 font-semibold">Gate {tx.gate_id}</td>
-                          <td className="px-6 py-4 text-right text-emerald-600 font-bold">
-                            Rp {(tx.total_amount || 0).toLocaleString('id-ID')}
-                          </td>
-                          <td className="px-6 py-4 text-slate-600">
-                            {tx.payment_method || '-'}
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                              tx.payment_status === 'PAID' 
-                                ? 'bg-emerald-100 text-emerald-700'
-                                : tx.payment_status === 'PENDING'
-                                ? 'bg-yellow-100 text-yellow-700'
-                                : 'bg-red-100 text-red-700'
-                            }`}>
-                              {tx.payment_status === 'PAID' ? '✅ Dibayar' : 
-                               tx.payment_status === 'PENDING' ? '⏳ Menunggu' : 
-                               '❌ Dibatalkan'}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-slate-600 text-sm">
-                            {new Date(tx.created_at).toLocaleString('id-ID')}
-                          </td>
-                        </tr>
+                        <React.Fragment key={tx.transaction_id}>
+                          <tr 
+                            className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
+                            onClick={() => toggleTransactionDetail(tx.transaction_id)}
+                          >
+                            <td className="px-6 py-4 text-slate-400">
+                              {expandedTx === tx.transaction_id ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
+                            </td>
+                            <td className="px-6 py-4 text-slate-700 font-mono text-sm">{tx.transaction_code}</td>
+                            <td className="px-6 py-4 text-slate-700 font-semibold">Gate {tx.gate_id}</td>
+                            <td className="px-6 py-4 text-right text-emerald-600 font-bold">
+                              Rp {(tx.total_amount || 0).toLocaleString('id-ID')}
+                            </td>
+                            <td className="px-6 py-4 text-slate-600">
+                              {tx.payment_method || '-'}
+                            </td>
+                            <td className="px-6 py-4">
+                              <span className={`px-3 py-1 rounded-full text-sm font-bold ${
+                                tx.payment_status === 'PAID' 
+                                  ? 'bg-emerald-100 text-emerald-700'
+                                  : tx.payment_status === 'PENDING'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-red-100 text-red-700'
+                              }`}>
+                              <div className="flex items-center gap-1.5 justify-center">
+                                {tx.payment_status === 'PAID' ? <><CheckCircle2 size={14} /> Dibayar</> : 
+                                 tx.payment_status === 'PENDING' ? <><Clock size={14} /> Menunggu</> : 
+                                 <><XCircle size={14} /> Dibatalkan</>}
+                              </div>
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-slate-600 text-sm">
+                              {new Date(tx.created_at).toLocaleString('id-ID')}
+                            </td>
+                          </tr>
+                          {expandedTx === tx.transaction_id && (
+                            <tr className="bg-slate-50 border-b border-slate-200">
+                              <td colSpan="7" className="px-6 py-4">
+                                <div className="pl-14">
+                                  <p className="text-sm font-bold text-slate-500 uppercase mb-3">Detail Item</p>
+                                  {txItems[tx.transaction_id] ? (
+                                    txItems[tx.transaction_id].length > 0 ? (
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                                        {txItems[tx.transaction_id].map((item, idx) => (
+                                          <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                                            <div>
+                                              <span className="font-semibold text-slate-700 text-sm">{item.item_name}</span>
+                                              <span className="text-slate-400 ml-2 text-sm">x{item.quantity}</span>
+                                            </div>
+                                            <span className="font-bold text-emerald-600 text-sm">
+                                              Rp {(item.unit_price * item.quantity).toLocaleString('id-ID')}
+                                            </span>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <p className="text-sm text-slate-400 italic">Detail item tidak tersedia.</p>
+                                    )
+                                  ) : (
+                                    <div className="flex py-2">
+                                      <div className="w-5 h-5 border-2 border-emerald-300 border-t-emerald-600 rounded-full animate-spin"></div>
+                                    </div>
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
                       ))}
                     </tbody>
                   </table>
