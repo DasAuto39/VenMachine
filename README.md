@@ -45,12 +45,10 @@ Saat pelanggan selesai membayar, Web akan mem-publish perintah ke mesin.
 *   **Topic**: `vending/{machineId}/cmd`  *(Contoh: `vending/VM001/cmd` untuk Gate 1)*
 *   **Arah**: Web/Frontend 👉 ESP32
 *   **Payload JSON**:
+    Berisi *array* dari ID barang yang dibeli. Jika pembeli membeli 2 buah barang dengan ID 1, maka angka 1 akan dikirim dua kali.
     ```json
     {
-      "command": "DISPENSE",
-      "item_id": 1,
-      "location_id": "ROW1",
-      "quantity": 1
+      "items": [1, 1, 2]
     }
     ```
 
