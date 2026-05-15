@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, LogOut, Newspaper, CheckCircle2, XCircle, Loader2, Package } from 'lucide-react';
 import ProductDetail from './ProductDetail';
+import Chatbot from './Chatbot';
 
 function App({ onGoToAdmin, onGoToLogin }) {
   const navigate = useNavigate();
@@ -62,12 +63,18 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 console.log(' MQTT Connected to broker');
                 setMqttConnected(true);
                 client.subscribe('vending/+/status');
+                client.subscribe('vending/stock');
               });
 
               client.on('message', async (topic, message) => {
                 try {
                   const payload = JSON.parse(message.toString());
-                  if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
+                  
+                  if (topic === 'vending/stock' && payload.item !== undefined) {
+                    console.log(`✅ CROSSCHECK: Barang dengan ID/Index ${payload.item} berhasil dikeluarkan secara fisik oleh ESP32.`);
+                    // Opsional: Tampilkan notifikasi jika Anda mau
+                    // showNotification(`Barang berhasil keluar!`, 'success');
+                  } else if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
                     console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
                     // Trigger backend to update DB
                     const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items/${payload.item_id}/restock`, {
@@ -104,12 +111,16 @@ function App({ onGoToAdmin, onGoToLogin }) {
             console.log(' MQTT Connected to broker');
             setMqttConnected(true);
             client.subscribe('vending/+/status');
+            client.subscribe('vending/stock');
           });
 
           client.on('message', async (topic, message) => {
             try {
               const payload = JSON.parse(message.toString());
-              if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
+              
+              if (topic === 'vending/stock' && payload.item !== undefined) {
+                console.log(`✅ CROSSCHECK: Barang dengan ID/Index ${payload.item} berhasil dikeluarkan secara fisik oleh ESP32.`);
+              } else if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
                 console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
                 // Trigger backend to update DB
                 const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/items/${payload.item_id}/restock`, {
@@ -945,6 +956,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
           onClose={closeProductDetail}
           onAddToCart={addToCartFromDetail}
         />
+
+        {/* Chatbot AI Assistant */}
+        <Chatbot items={items} onAddToCart={addToCart} />
 
       </div>
       {/* End of relative z-10 wrapper */}

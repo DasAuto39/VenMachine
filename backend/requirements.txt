@@ -4,3 +4,4 @@ asyncpg
 pydantic
 bcrypt
 python-dotenv
+requests

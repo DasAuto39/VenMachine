@@ -147,9 +147,14 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                     )
                     for tx_item in tx_items:
                         result = await connection.fetchrow(
-                            "UPDATE items SET machine_stock = machine_stock - $1, updated_at = NOW() WHERE id = $2 RETURNING machine_stock, location_id",
+                            "UPDATE items SET machine_stock = machine_stock - $1, updated_at = NOW() WHERE id = $2 AND machine_stock >= $1 RETURNING machine_stock, location_id",
                             tx_item['quantity'], tx_item['item_id']
                         )
+                        
+                        if not result:
+                            # Robust concurrency control: Prevent negative stock if two users checkout simultaneously
+                            raise HTTPException(status_code=400, detail=f"Stock insufficient for item {tx_item['item_id']} during payment processing")
+                            
                         dispensed_items.append({
                             "item_id": tx_item['item_id'],
                             "remaining_machine_stock": result['machine_stock'],

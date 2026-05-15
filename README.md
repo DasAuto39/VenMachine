@@ -52,6 +52,19 @@ Saat pelanggan selesai membayar, Web akan mem-publish perintah ke mesin.
     }
     ```
 
+### 2. Laporan Lintas-Cek Pengeluaran Fisik (ESP32 → Web)
+Setiap kali ESP32 *selesai* menggerakkan motor untuk 1 buah barang, ESP32 harus melapor ke Web sebagai bukti (*crosscheck*) bahwa barang benar-benar keluar secara fisik.
+
+*   **Topic**: `vending/stock`
+*   **Arah**: ESP32 👉 Web/Frontend
+*   **Payload JSON**:
+    ```json
+    {
+      "item": 1
+    }
+    ```
+*(Catatan: Pengurangan stok di database sudah dilakukan secara instan di awal pembayaran untuk mencegah pembeli lain mengambil stok yang sama / menghindari race-condition. Pesan MQTT ini digunakan web semata-mata sebagai log verifikasi fisik).*
+
 ### 2. Perintah Isi Ulang / Restock (Web → ESP32)
 Jika setelah pembayaran `machine_stock` turun di bawah 2 unit, Web akan memerintahkan ESP32 untuk memindahkan barang dari belakang ke depan.
 

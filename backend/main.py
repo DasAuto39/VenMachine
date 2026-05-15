@@ -1,7 +1,10 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
-from typing import Optional
+from typing import Optional, List, Dict
+import requests
+import json
+import os
 from database import DatabasePool
 from queries import (
     get_available_items,
@@ -63,6 +66,13 @@ class RegisterRequest(BaseModel):
     password: str
     full_name: str
     phone: Optional[str] = None
+    role: str = 'customer'
+
+class ChatRequest(BaseModel):
+    message: str
+    full_name: str
+    phone: Optional[str] = None
+    history: Optional[List[Dict[str, str]]] = []
 
 class LoginRequest(BaseModel):
     username: str
@@ -113,6 +123,101 @@ async def login_endpoint(req: LoginRequest):
     """Login user with username and password"""
     return await login_user(req.username, req.password)
 
+# ===== AI ASSISTANT ENDPOINT =====
+@app.post("/api/chat")
+async def chat_endpoint(req: ChatRequest):
+    """Chatbot AI Endpoint with Dynamic DB Context"""
+    available_items = await get_available_items()
+    
+    # Format available items for the prompt
+    item_list_str = "\n".join([f"- ID: {item['id']} | Name: {item['name']} | Price: Rp{item['price']} | Stock: {item['machine_stock']}" for item in available_items])
+    
+    system_prompt = f"""
+Anda adalah Koki Ahli Masakan Indonesia untuk Smart Vending Machine.
+Bantu pengguna memasak dengan bahan yang tersedia.
+
+STOK BAHAN:
+{item_list_str}
+
+TUGAS ANDA:
+1. Jika pengguna meminta saran masakan, berikan rekomendasi menu yang MASUK AKAL berdasarkan "STOK BAHAN" di atas. JANGAN menyarankan masakan aneh. Tanyakan apakah mereka ingin memasukkannya ke keranjang.
+2. JIKA pengguna membalas setuju/mengonfirmasi saran Anda (contoh: "oke", "ya", "tambahkan"), Anda WAJIB merespons dengan memasukkan ID barang ke dalam array `action_items` dan mengkonfirmasi bahwa barang telah ditambahkan.
+3. JIKA pengguna belum setuju/masih bertanya, `action_items` HARUS kosong [].
+4. Berikan output HANYA dalam JSON valid, tanpa teks lain.
+
+CONTOH JSON JIKA MENAWARKAN:
+{{
+  "message": "Untuk masakan berkuah, saya sarankan Sayur Bening dengan Bayam Segar. Mau saya tambahkan ke keranjang?",
+  "action_items": []
+}}
+CONTOH JSON JIKA USER MENJAWAB SETUJU:
+{{
+  "message": "Baik, Bayam Segar (ID 2) telah ditambahkan ke keranjang Anda.",
+  "action_items": [2]
+}}
+"""
+    
+    messages_payload = [{"role": "system", "content": system_prompt}]
+    
+    if req.history:
+        for msg in req.history[-5:]: # Ambil 5 riwayat terakhir
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            if role == "bot": 
+                role = "assistant"
+                # Bungkus kembali history AI menjadi JSON agar AI tetap konsisten membalas dengan JSON
+                content = json.dumps({"message": content, "action_items": []})
+            messages_payload.append({"role": role, "content": content})
+            
+    messages_payload.append({"role": "user", "content": req.message})
+
+
+    
+    llm_host = os.getenv("LLM_HOST")
+    
+    try:
+        response = requests.post(
+            f"{llm_host}/api/chat",
+            json={
+                "model": "llama3",
+                "messages": messages_payload,
+                "stream": False,
+                "options": {
+                    "temperature": 0.6
+                }
+            },
+            timeout=120
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        raw_text = data.get("message", {}).get("content", "").strip()
+        
+        # Ekstrak teks yang hanya berada di antara { dan } untuk membuang percakapan basa-basi LLM
+        start_idx = raw_text.find('{')
+        end_idx = raw_text.rfind('}')
+        
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            json_text = raw_text[start_idx:end_idx+1]
+            parsed = json.loads(json_text)
+            return parsed
+        else:
+            raise json.JSONDecodeError("No JSON object found", raw_text, 0)
+        
+    except requests.exceptions.RequestException as e:
+        print("LLM Connection Error:", e)
+        return {
+            "message": "Maaf, asisten AI saat ini sedang offline. Silakan tambahkan barang ke keranjang secara manual.",
+            "action_items": []
+        }
+    except json.JSONDecodeError as e:
+        print("LLM JSON Parsing Error:", e, "Raw output:", raw_text)
+        return {
+            "message": "Maaf, saya tidak dapat memproses permintaan Anda saat ini. Silakan pilih barang secara manual.",
+            "action_items": []
+        }
+
+
 # Endpoint 1: Mengambil katalog barang untuk UI React
 @app.get("/api/items")
 async def get_items():
@@ -138,10 +243,10 @@ async def checkout_endpoint(req: CheckoutRequest):
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item_id} tidak ditemukan")
         
-        if db_item['stock_quantity'] < requested_qty:
+        if db_item['machine_stock'] < requested_qty:
             raise HTTPException(
                 status_code=400, 
-                detail=f"{db_item['name']}: stok hanya {db_item['stock_quantity']} buah, Anda meminta {requested_qty} buah"
+                detail=f"{db_item['name']}: stok hanya {db_item['machine_stock']} buah, Anda meminta {requested_qty} buah"
             )
     
     return await create_transaction(req.gate_id, req.items_cart, req.user_id)

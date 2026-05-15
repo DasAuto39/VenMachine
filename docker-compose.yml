@@ -12,6 +12,30 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
+  ollama:
+    image: ollama/ollama:latest
+    restart: always
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      - OLLAMA_MODELS=/root/.ollama/models
+    # GPU support (uncomment if you have NVIDIA GPU):
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 30s
+      timeout: 10s
+      retries: 30
+      start_period: 300s
+
   backend:
     build: ./backend
     ports:
@@ -19,9 +43,15 @@ services:
     volumes:
       - ./backend:/app  # Sinkronisasi folder agar fitur --reload tetap jalan saat Anda edit kode
     depends_on:
-      - db
+      db:
+        condition: service_started
+      ollama:
+        condition: service_healthy
     env_file:
       - .env
+    environment:
+      # Override LLM host untuk docker network
+      LLM_HOST: http://ollama:11434
   frontend:
     build: ./frontend
     ports:
@@ -34,3 +64,4 @@ services:
 
 volumes:
   pg_data:
+  ollama_data:
