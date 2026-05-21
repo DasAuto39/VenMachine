@@ -135,8 +135,8 @@ const Chatbot = ({ items, onAddToCart }) => {
                 </div>
               ) : (
                 <div className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm ${msg.role === 'user'
-                    ? 'bg-indigo-600 text-white rounded-tr-none'
-                    : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
+                  ? 'bg-indigo-600 text-white rounded-tr-none'
+                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
                   <p className="text-sm leading-relaxed whitespace-pre-wrap text-justify">{msg.content}</p>
                 </div>
               )}
@@ -180,13 +180,13 @@ const Chatbot = ({ items, onAddToCart }) => {
               disabled={!input.trim() || isLoading}
               className={`p-1.5 mb-0.5 rounded-full ${input.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-300 text-slate-500'} transition-colors shrink-0`}
             >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-0.5 transform rotate-0" viewBox="0 0 20 20" fill="currentColor">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-0.5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
               </svg>
             </button>
           </div>
           <div className="text-center mt-2">
-            <span className="text-[10px] text-slate-400 font-medium">Powered by Ollama Llama3</span>
+            <span className="text-[10px] text-slate-400 font-medium">Powered by Google Gemini 3 Flash</span>
           </div>
         </form>
       </div>

@@ -157,61 +157,84 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
 }}
 """
     
-    messages_payload = [{"role": "system", "content": system_prompt}]
+    gemini_api_key = os.getenv("GEMINI_API_KEY")
+    if not gemini_api_key:
+        return {
+            "message": "Sistem AI belum dikonfigurasi (GEMINI_API_KEY tidak ditemukan).",
+            "action_items": []
+        }
+
+    contents_payload = []
     
     if req.history:
         for msg in req.history[-5:]: # Ambil 5 riwayat terakhir
             role = msg.get("role", "user")
             content = msg.get("content", "")
-            if role == "bot": 
-                role = "assistant"
+            
+            if role == "bot" or role == "assistant": 
+                role = "model" # Gemini menggunakan "model", bukan "bot" atau "assistant"
                 # Bungkus kembali history AI menjadi JSON agar AI tetap konsisten membalas dengan JSON
                 content = json.dumps({"message": content, "action_items": []})
-            messages_payload.append({"role": role, "content": content})
+            else:
+                role = "user"
+                
+            contents_payload.append({
+                "role": role,
+                "parts": [{"text": content}]
+            })
             
-    messages_payload.append({"role": "user", "content": req.message})
+    # Tambahkan pesan user saat ini
+    contents_payload.append({
+        "role": "user",
+        "parts": [{"text": req.message}]
+    })
 
-
-    
-    llm_host = os.getenv("LLM_HOST")
-    
     try:
-        response = requests.post(
-            f"{llm_host}/api/chat",
-            json={
-                "model": "llama3",
-                "messages": messages_payload,
-                "stream": False,
-                "options": {
-                    "temperature": 0.6
-                }
+        # Menggunakan model gemini-2.5-flash (versi stabil yang mungkin tidak sepadat 'latest')
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={gemini_api_key}"
+        
+        payload = {
+            "system_instruction": {
+                "parts": {"text": system_prompt}
             },
-            timeout=120
-        )
+            "contents": contents_payload,
+            "generationConfig": {
+                "temperature": 0.6,
+                "response_mime_type": "application/json" # Memaksa Gemini untuk mengembalikan format JSON yang valid
+            }
+        }
+        
+        response = requests.post(url, json=payload, timeout=30)
         response.raise_for_status()
         data = response.json()
         
-        raw_text = data.get("message", {}).get("content", "").strip()
+        # Ekstrak teks balasan dari struktur payload Gemini
+        raw_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
         
-        # Ekstrak teks yang hanya berada di antara { dan } untuk membuang percakapan basa-basi LLM
-        start_idx = raw_text.find('{')
-        end_idx = raw_text.rfind('}')
+        if not raw_text:
+            raise json.JSONDecodeError("Empty response from Gemini", "", 0)
+            
+        parsed = json.loads(raw_text)
         
-        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-            json_text = raw_text[start_idx:end_idx+1]
-            parsed = json.loads(json_text)
-            return parsed
-        else:
-            raise json.JSONDecodeError("No JSON object found", raw_text, 0)
+        # Fallback safeguard jika format dari AI tidak ada
+        if "message" not in parsed:
+            parsed["message"] = "Terjadi kesalahan format dari AI."
+        if "action_items" not in parsed:
+            parsed["action_items"] = []
+            
+        return parsed
         
     except requests.exceptions.RequestException as e:
-        print("LLM Connection Error:", e)
+        print("Gemini API Connection Error:", e)
+        # Jika API response error, mungkin error response content bisa membantu di terminal
+        if hasattr(e, 'response') and e.response is not None:
+            print("Response:", e.response.text)
         return {
             "message": "Maaf, asisten AI saat ini sedang offline. Silakan tambahkan barang ke keranjang secara manual.",
             "action_items": []
         }
     except json.JSONDecodeError as e:
-        print("LLM JSON Parsing Error:", e, "Raw output:", raw_text)
+        print("Gemini JSON Parsing Error:", e, "Raw output:", raw_text if 'raw_text' in locals() else 'None')
         return {
             "message": "Maaf, saya tidak dapat memproses permintaan Anda saat ini. Silakan pilih barang secara manual.",
             "action_items": []

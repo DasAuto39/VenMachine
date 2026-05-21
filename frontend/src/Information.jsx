@@ -1,12 +1,22 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
-import { ArrowLeft, Newspaper, Tag } from 'lucide-react';
+import { ArrowLeft, Newspaper, Tag, LogOut } from 'lucide-react';
 
 function Information() {
   const navigate = useNavigate();
   const [posts, setPosts] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
+
+  let user = null;
+  try {
+    const storedUser = localStorage.getItem('user');
+    if (storedUser) {
+      user = JSON.parse(storedUser);
+    }
+  } catch (err) {
+    console.error('Error parsing user data:', err);
+  }
 
   useEffect(() => {
     fetchPosts();
@@ -52,17 +62,38 @@ function Information() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
+            {user && (
+              <button
+                onClick={() => navigate('/profile')}
+                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+              >
+                <span className="text-base">👤 <span className="hidden md:inline">{user?.full_name || user?.username}</span></span>
+              </button>
+            )}
             <button
               onClick={() => {
                 const savedGate = localStorage.getItem('current_gate');
                 navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
               }}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
+              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <ArrowLeft size={18} />
-              Kembali Belanja
+              <span className="hidden md:inline text-base">Kembali Belanja</span>
             </button>
+            {localStorage.getItem('authenticated') === 'true' && (
+              <button
+                onClick={() => {
+                  localStorage.removeItem('user');
+                  localStorage.removeItem('authenticated');
+                  navigate('/user');
+                }}
+                className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+              >
+                <LogOut size={18} />
+                <span className="hidden md:inline text-base">Logout</span>
+              </button>
+            )}
           </div>
         </header>
 

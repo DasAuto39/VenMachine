@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ShoppingCart, LogOut, Newspaper, CheckCircle2, XCircle, Loader2, Package } from 'lucide-react';
+import { ShoppingCart, LogOut, Newspaper, CheckCircle2, XCircle, Loader2, Package, QrCode, Settings } from 'lucide-react';
 import ProductDetail from './ProductDetail';
 import Chatbot from './Chatbot';
 
@@ -13,6 +13,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
   const [user, setUser] = useState(null);
 
   const [items, setItems] = useState([]);
+  const itemsRef = useRef([]);
+
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("Semua");
   const [cart, setCart] = useState({}); // Ubah dari array ke object: {itemId: {item, qty}}
@@ -69,11 +75,13 @@ function App({ onGoToAdmin, onGoToLogin }) {
               client.on('message', async (topic, message) => {
                 try {
                   const payload = JSON.parse(message.toString());
-                  
+
                   if (topic === 'vending/stock' && payload.item !== undefined) {
-                    console.log(`✅ CROSSCHECK: Barang dengan ID/Index ${payload.item} berhasil dikeluarkan secara fisik oleh ESP32.`);
-                    // Opsional: Tampilkan notifikasi jika Anda mau
-                    // showNotification(`Barang berhasil keluar!`, 'success');
+                    const matchedItem = itemsRef.current.find(i => i.id == payload.item);
+                    const itemName = matchedItem ? matchedItem.name : `Produk ID ${payload.item}`;
+                    console.log(`✅ CROSSCHECK: Barang ${itemName} berhasil dikeluarkan.`);
+                    setNotification({ message: `📦 Satu ${itemName} sukses dijatuhkan dari mesin!`, type: 'success' });
+                    setTimeout(() => setNotification(null), 4000);
                   } else if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
                     console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
                     // Trigger backend to update DB
@@ -117,9 +125,13 @@ function App({ onGoToAdmin, onGoToLogin }) {
           client.on('message', async (topic, message) => {
             try {
               const payload = JSON.parse(message.toString());
-              
+
               if (topic === 'vending/stock' && payload.item !== undefined) {
-                console.log(`✅ CROSSCHECK: Barang dengan ID/Index ${payload.item} berhasil dikeluarkan secara fisik oleh ESP32.`);
+                const matchedItem = itemsRef.current.find(i => i.id == payload.item);
+                const itemName = matchedItem ? matchedItem.name : `Produk ID ${payload.item}`;
+                console.log(`✅ CROSSCHECK: Barang ${itemName} berhasil dikeluarkan.`);
+                setNotification({ message: `📦 Satu ${itemName} sukses dijatuhkan dari mesin!`, type: 'success' });
+                setTimeout(() => setNotification(null), 4000);
               } else if (payload.status === 'RESTOCK_DONE' && payload.item_id) {
                 console.log(`Received RESTOCK_DONE for item ${payload.item_id}`);
                 // Trigger backend to update DB
@@ -392,7 +404,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
         if (paymentData.dispensed_items && paymentData.dispensed_items.length > 0) {
           const numStr = String(currentGate).replace(/\D/g, '') || '1';
           const machineId = `VM${numStr.padStart(3, '0')}`;
-          
+
           for (const dispensed of paymentData.dispensed_items) {
             if (dispensed.remaining_machine_stock < 2) {
               // Send RESTOCK command to MQTT
@@ -513,8 +525,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
         {notification && (
           <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 animate-bounce-short">
             <div className={`backdrop-blur-md px-6 py-3 rounded-full font-bold shadow-xl border flex items-center gap-2 ${notification.type === 'error'
-                ? 'bg-rose-500/90 text-white border-rose-400'
-                : 'bg-emerald-500/90 text-white border-emerald-400'
+              ? 'bg-rose-500/90 text-white border-rose-400'
+              : 'bg-emerald-500/90 text-white border-emerald-400'
               }`}>
               {notification.type === 'error' ? <XCircle size={20} /> : <CheckCircle2 size={20} />}
               {notification.message}
@@ -540,38 +552,39 @@ function App({ onGoToAdmin, onGoToLogin }) {
           </div>
 
           {/* Cart and Auth Buttons */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
             {user && (
               <button
                 onClick={() => navigate('/profile')}
-                className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 rounded-2xl transition-all shadow-sm border border-slate-200"
+                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
               >
-                <span className="text-sm text-slate-700 font-bold">👤 {user?.full_name || user?.username}</span>
+                <span className="text-base">👤 <span className="hidden md:inline">{user?.full_name || user?.username}</span></span>
               </button>
             )}
             {user?.role === 'admin' && (
               <button
                 onClick={() => navigate('/admin')}
-                className="relative flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 hover:border-indigo-400 px-5 py-2.5 rounded-2xl font-bold text-indigo-700 hover:text-indigo-800 hover:bg-gradient-to-r hover:from-indigo-100 hover:to-blue-100 transition-all shadow-sm hover:shadow-md"
+                className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
               >
-                <span>⚙️ Admin Panel</span>
+                <Settings size={18} className="md:hidden" />
+                <span className="hidden md:inline text-base">Dashboard Admin</span>
               </button>
             )}
             <button
               onClick={() => navigate('/information')}
-              className="relative flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-400 px-5 py-2.5 rounded-2xl font-bold text-purple-700 hover:text-purple-800 hover:bg-gradient-to-r hover:from-purple-100 hover:to-pink-100 transition-all shadow-sm hover:shadow-md"
+              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <Newspaper size={18} />
-              <span>Info & Promo</span>
+              <span className="hidden md:inline text-base">Info & Promo</span>
             </button>
             <button
               onClick={() => setIsCartOpen(true)}
-              className="relative flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
+              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <ShoppingCart size={18} />
-              <span>Keranjang</span>
+              <span className="hidden md:inline text-base">Keranjang</span>
               {cartItemCount > 0 && (
-                <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-xs font-black w-6 h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
+                <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-rose-500 text-white text-[10px] md:text-xs font-black w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
                   {cartItemCount}
                 </span>
               )}
@@ -579,17 +592,17 @@ function App({ onGoToAdmin, onGoToLogin }) {
             {user ? (
               <button
                 onClick={handleLogout}
-                className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-5 py-2.5 rounded-2xl font-bold text-rose-700 hover:text-rose-800 hover:border-rose-400 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md"
+                className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
               >
                 <LogOut size={18} />
-                Logout
+                <span className="hidden md:inline text-base">Logout</span>
               </button>
             ) : (
               <button
                 onClick={() => navigate('/login')}
-                className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-5 py-2.5 rounded-2xl font-bold text-blue-700 hover:text-blue-800 hover:border-blue-400 hover:bg-blue-100 transition-all"
+                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
               >
-                🔐 Login
+                <span className="text-base">🔐 <span className="hidden md:inline">Login</span></span>
               </button>
             )}
           </div>
@@ -831,14 +844,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 </div>
                 <div className="flex justify-between items-center pt-4 border-t border-slate-100 mb-6">
                   <span className="text-lg font-black text-slate-800">Total Pembayaran</span>
-                  <span className="text-2xl font-black text-emerald-600">Rp {cartTotal.toLocaleString('id-ID')}</span>
+                  <span className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500">Rp {cartTotal.toLocaleString('id-ID')}</span>
                 </div>
                 <button
                   onClick={handleCheckout}
                   disabled={cartItemCount === 0}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white font-bold py-4 rounded-2xl disabled:bg-slate-300 disabled:text-slate-500 transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none text-lg active:scale-[0.98]"
+                  className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white font-bold py-4 rounded-2xl disabled:from-slate-300 disabled:to-slate-300 disabled:text-slate-500 transition-all duration-300 shadow-lg shadow-emerald-500/30 disabled:shadow-none text-lg transform hover:-translate-y-0.5 active:scale-95 flex items-center justify-center gap-2"
                 >
-                  {isProcessing ? ' Memproses...' : ' Lanjut ke Pembayaran'}
+                  {isProcessing ? 'Memproses...' : 'Checkout & Bayar'}
                 </button>
               </div>
 
@@ -846,87 +859,79 @@ function App({ onGoToAdmin, onGoToLogin }) {
           </div>
         )}
 
-        {/* PAYMENT MODAL */}
+        {/* PAYMENT MODAL (QRIS ONLY) */}
         {isPaymentModalOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
-            {/* Overlay Gelap */}
+            {/* Overlay Glassmorphism */}
             <div
-              className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm"
+              className="absolute inset-0 bg-slate-900/60 backdrop-blur-md transition-opacity"
               onClick={() => !isProcessing && setIsPaymentModalOpen(false)}
             ></div>
 
             {/* Modal Panel */}
-            <div className="relative bg-white rounded-3xl shadow-2xl p-8 max-w-md w-full mx-4">
-              <h2 className="text-2xl font-black mb-6 text-center">Pilih Metode Pembayaran</h2>
+            <div className="relative bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] shadow-2xl p-8 max-w-sm w-full mx-4 transform transition-all">
 
               {paymentStatus === 'success' && (
-                <div className="text-center py-8">
-                  <div className="text-emerald-500 mb-4 flex justify-center">
-                    <CheckCircle2 size={80} className="animate-bounce" />
+                <div className="text-center py-6">
+                  <div className="text-emerald-500 mb-6 flex justify-center">
+                    <CheckCircle2 size={80} className="animate-bounce drop-shadow-md" />
                   </div>
-                  <h3 className="text-xl font-black text-emerald-600 mb-2">Pembayaran Berhasil!</h3>
-                  <p className="text-slate-600">Silahkan ambil barang Anda dari mesin</p>
+                  <h3 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500 mb-2">Pembayaran Berhasil!</h3>
+                  <p className="text-slate-600 font-medium">Silakan ambil barang Anda di laci bawah mesin.</p>
                 </div>
               )}
 
               {paymentStatus === 'failed' && (
-                <div className="text-center py-8">
-                  <div className="text-rose-500 mb-4 flex justify-center">
-                    <XCircle size={80} />
+                <div className="text-center py-6">
+                  <div className="text-rose-500 mb-6 flex justify-center">
+                    <XCircle size={80} className="drop-shadow-md" />
                   </div>
-                  <h3 className="text-xl font-black text-rose-600 mb-2">Pembayaran Gagal</h3>
-                  <p className="text-slate-600 mb-6">Silahkan coba metode pembayaran lain</p>
+                  <h3 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-rose-500 to-pink-500 mb-2">Pembayaran Gagal</h3>
+                  <p className="text-slate-600 font-medium mb-8">Waktu pembayaran habis atau terjadi kesalahan jaringan.</p>
                   <button
                     onClick={() => setPaymentStatus(null)}
-                    className="px-6 py-2 bg-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-300 transition-all"
+                    className="w-full px-6 py-3 bg-slate-100 text-slate-700 rounded-full font-bold hover:bg-slate-200 transition-colors"
                   >
-                    Kembali
+                    Coba Lagi
                   </button>
                 </div>
               )}
 
               {!paymentStatus && (
                 <>
-                  <div className="space-y-3 mb-6">
-                    {[
-                      { value: 'QRIS', label: ' QRIS', desc: 'Scan QR Code' },
-                      { value: 'TRANSFER', label: ' Transfer Bank', desc: 'Transfer ATM/Mobile Banking' },
-                      { value: 'CARD', label: ' Kartu Kredit', desc: 'Visa, Mastercard, dll' },
-                      { value: 'CASH', label: ' Tunai', desc: 'Bayar dengan uang tunai' },
-                    ].map(method => (
-                      <button
-                        key={method.value}
-                        onClick={() => setPaymentMethod(method.value)}
-                        className={`w-full p-4 rounded-2xl font-bold border-2 transition-all text-left ${paymentMethod === method.value
-                          ? 'border-emerald-500 bg-emerald-50 text-emerald-700'
-                          : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-slate-300'
-                          }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <span>{method.label}</span>
-                          {paymentMethod === method.value && <span className="text-lg">✓</span>}
-                        </div>
-                        <p className="text-xs text-slate-500 mt-1">{method.desc}</p>
-                      </button>
-                    ))}
+                  <div className="text-center mb-8">
+                    <h2 className="text-2xl font-black text-slate-800">Pembayaran QRIS</h2>
+                    <p className="text-slate-500 font-medium mt-1">Scan kode QR di bawah menggunakan aplikasi E-Wallet atau M-Banking Anda.</p>
+                  </div>
+
+                  {/* Mock QR Code Container */}
+                  <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 mb-8 flex flex-col items-center justify-center relative overflow-hidden group">
+                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50 to-teal-50 opacity-50"></div>
+                    <div className="relative z-10 w-48 h-48 bg-white border-2 border-slate-100 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-105 transition-transform duration-500">
+                      <QrCode size={120} className="text-slate-800" strokeWidth={1.5} />
+                    </div>
+                    <div className="relative z-10 text-center">
+                      <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Tagihan</p>
+                      <p className="text-3xl font-black text-emerald-600">Rp {cartTotal.toLocaleString('id-ID')}</p>
+                    </div>
                   </div>
 
                   <div className="space-y-3">
                     <button
                       onClick={handlePayment}
                       disabled={isProcessing}
-                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white py-4 rounded-2xl font-bold text-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30"
+                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white py-4 rounded-full font-bold text-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 transform hover:-translate-y-0.5"
                     >
                       {isProcessing ? (
-                        <>
+                        <div className="flex items-center justify-center gap-2">
                           <Loader2 size={20} className="animate-spin" />
-                          <span>Memproses...</span>
-                        </>
+                          <span>Menunggu Konfirmasi...</span>
+                        </div>
                       ) : (
-                        <>
+                        <div className="flex items-center justify-center gap-2">
                           <CheckCircle2 size={20} />
-                          <span>Bayar Sekarang</span>
-                        </>
+                          <span>Simulasi Berhasil</span>
+                        </div>
                       )}
                     </button>
 
@@ -938,9 +943,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
                         setIsCartOpen(true);
                       }}
                       disabled={isProcessing}
-                      className="w-full py-3 border-2 border-slate-300 text-slate-700 rounded-2xl font-bold hover:bg-slate-50 transition-all disabled:opacity-50"
+                      className="w-full py-3 text-slate-500 hover:text-slate-800 font-bold transition-colors"
                     >
-                      Batal
+                      Batalkan Transaksi
                     </button>
                   </div>
                 </>

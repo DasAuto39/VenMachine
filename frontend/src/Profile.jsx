@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Newspaper, LogOut, Mail, Phone, ShoppingBag, ShoppingCart, CheckCircle2, Clock, XCircle, ArrowLeft, ChevronDown, ChevronUp } from 'lucide-react';
+import { Newspaper, LogOut, Mail, Phone, ShoppingBag, ShoppingCart, CheckCircle2, Clock, XCircle, ArrowLeft, ChevronDown, ChevronUp, Settings } from 'lucide-react';
 
 function Profile() {
   const navigate = useNavigate();
@@ -97,44 +97,45 @@ function Profile() {
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
             {user?.role === 'admin' && (
               <button
                 onClick={() => navigate('/admin')}
-                className="relative flex items-center gap-2 bg-gradient-to-r from-indigo-50 to-blue-50 border border-indigo-200 hover:border-indigo-400 px-5 py-2.5 rounded-2xl font-bold text-indigo-700 hover:text-indigo-800 hover:bg-gradient-to-r hover:from-indigo-100 hover:to-blue-100 transition-all shadow-sm hover:shadow-md"
+                className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
               >
-                <span>⚙️ Admin Panel</span>
+                <Settings size={18} className="md:hidden" />
+                <span className="hidden md:inline text-base">Dashboard Admin</span>
               </button>
             )}
             <button
               onClick={() => navigate('/information')}
-              className="relative flex items-center gap-2 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 hover:border-purple-400 px-5 py-2.5 rounded-2xl font-bold text-purple-700 hover:text-purple-800 hover:bg-gradient-to-r hover:from-purple-100 hover:to-pink-100 transition-all shadow-sm hover:shadow-md"
+              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <Newspaper size={18} />
-              <span>Info & Promo</span>
+              <span className="hidden md:inline text-base">Info & Promo</span>
             </button>
             <button
               onClick={() => {
                 const savedGate = localStorage.getItem('current_gate');
                 navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
               }}
-              className="flex items-center gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200 hover:border-emerald-400 px-5 py-2.5 rounded-2xl font-bold text-emerald-700 hover:text-emerald-800 hover:bg-gradient-to-r hover:from-emerald-100 hover:to-teal-100 transition-all shadow-sm hover:shadow-md"
+              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <ArrowLeft size={18} />
-              Kembali Belanja
+              <span className="hidden md:inline text-base">Kembali Belanja</span>
             </button>
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 bg-rose-50 border border-rose-200 px-5 py-2.5 rounded-2xl font-bold text-rose-700 hover:text-rose-800 hover:border-rose-400 hover:bg-rose-100 transition-all"
+              className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
             >
               <LogOut size={18} />
-              Logout
+              <span className="hidden md:inline text-base">Logout</span>
             </button>
           </div>
         </header>
 
         <main className="max-w-4xl mx-auto px-6 py-8 pt-28 space-y-8">
-          
+
           {/* User Info Card */}
           <div className="bg-white/90 backdrop-blur-sm rounded-3xl p-8 shadow-xl shadow-emerald-600/10 border border-white/40">
             <div className="flex items-center gap-6">
@@ -146,7 +147,7 @@ function Profile() {
                 <p className="text-emerald-600 font-semibold mb-2">@{user.username}</p>
                 <div className="flex flex-wrap gap-4 text-sm text-slate-600 mt-3">
                   <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg font-medium">
-                    <Mail size={16} className="text-slate-400" /> 
+                    <Mail size={16} className="text-slate-400" />
                     {user.email || 'Tidak ada email'}
                   </div>
                   {user.phone && (
@@ -166,7 +167,7 @@ function Profile() {
               <ShoppingBag className="text-emerald-500" />
               <span>Riwayat Pembelian</span>
             </h2>
-            
+
             {isLoading ? (
               <div className="text-center py-12 text-slate-500">
                 <p className="animate-pulse font-semibold">Memuat riwayat...</p>
@@ -178,7 +179,7 @@ function Profile() {
                 </div>
                 <p className="text-lg font-semibold text-slate-600">Belum ada riwayat pembelian.</p>
                 <p className="text-sm text-slate-400 mt-1">Ayo mulai belanja di FreshMart!</p>
-                <button 
+                <button
                   onClick={() => {
                     const savedGate = localStorage.getItem('current_gate');
                     navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
@@ -192,7 +193,7 @@ function Profile() {
               <div className="space-y-4">
                 {transactions.map((tx) => (
                   <div key={tx.transaction_id} className="bg-white border border-slate-200 rounded-2xl p-5 hover:border-emerald-300 transition-colors shadow-sm">
-                    <div 
+                    <div
                       className="flex flex-col md:flex-row md:items-center justify-between gap-4 cursor-pointer"
                       onClick={() => toggleTransactionDetail(tx.transaction_id)}
                     >
@@ -201,21 +202,20 @@ function Profile() {
                           <span className="text-sm font-mono bg-slate-100 text-slate-600 px-2 py-1 rounded">
                             {tx.transaction_code}
                           </span>
-                          <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${
-                            tx.payment_status === 'PAID' 
+                          <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${tx.payment_status === 'PAID'
                               ? 'bg-emerald-100 text-emerald-700'
                               : tx.payment_status === 'PENDING'
-                              ? 'bg-amber-100 text-amber-700'
-                              : 'bg-rose-100 text-rose-700'
-                          }`}>
-                            {tx.payment_status === 'PAID' ? <><CheckCircle2 size={12} /> Berhasil</> : 
-                             tx.payment_status === 'PENDING' ? <><Clock size={12} /> Menunggu</> : 
-                             <><XCircle size={12} /> Batal</>}
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-rose-100 text-rose-700'
+                            }`}>
+                            {tx.payment_status === 'PAID' ? <><CheckCircle2 size={12} /> Berhasil</> :
+                              tx.payment_status === 'PENDING' ? <><Clock size={12} /> Menunggu</> :
+                                <><XCircle size={12} /> Batal</>}
                           </span>
                         </div>
                         <p className="text-sm text-slate-500">
                           {new Date(tx.created_at).toLocaleString('id-ID', { dateStyle: 'long', timeStyle: 'short' })}
-                          <span className="mx-2">•</span> 
+                          <span className="mx-2">•</span>
                           Gate {tx.gate_id}
                         </p>
                       </div>
@@ -229,7 +229,7 @@ function Profile() {
                             <p className="text-xs text-slate-500 mt-1">Metode: {tx.payment_method}</p>
                           )}
                         </div>
-                        {expandedTx === tx.transaction_id 
+                        {expandedTx === tx.transaction_id
                           ? <ChevronUp size={20} className="text-slate-400" />
                           : <ChevronDown size={20} className="text-slate-400" />}
                       </div>

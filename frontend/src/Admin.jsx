@@ -13,7 +13,8 @@ import {
   XCircle,
   Clock,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  ArrowLeft
 } from 'lucide-react';
 
 function Admin() {
@@ -303,48 +304,66 @@ function Admin() {
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white border-b border-slate-200 px-6 py-4 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center mb-4">
-          <h1 className="text-2xl font-black text-slate-900">Admin Panel</h1>
-          <button 
-            onClick={() => navigate('/user')}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition-colors"
-          >
-            ← Kembali ke Belanja
-          </button>
+      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-indigo-50 px-6 py-5 shadow-sm">
+        <div className="max-w-7xl mx-auto flex justify-between items-center mb-6">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl shadow-lg shadow-indigo-500/30">
+              <Settings className="text-white w-6 h-6" />
+            </div>
+            <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
+          </div>
+          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
+            <button 
+              onClick={() => navigate('/user')}
+              className="px-3 md:px-5 py-2 md:py-2.5 bg-white border-2 border-indigo-100 text-indigo-600 rounded-full font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-300 flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5 whitespace-nowrap"
+            >
+              <ArrowLeft className="w-4 h-4" /> <span className="hidden md:inline text-base">Kembali Belanja</span>
+            </button>
+            <button
+              onClick={() => {
+                localStorage.removeItem('user');
+                localStorage.removeItem('authenticated');
+                navigate('/user');
+              }}
+              className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:-translate-y-0.5 whitespace-nowrap"
+            >
+              <LogOut size={18} />
+              <span className="hidden md:inline text-base">Logout</span>
+            </button>
+          </div>
         </div>
         
         {/* Tabs */}
-        <div className="flex gap-2">
+        <div className="flex gap-3 max-w-7xl mx-auto overflow-x-auto pb-1 hide-scrollbar">
           <button
             onClick={() => setActiveTab('products')}
-            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
               activeTab === 'products'
-                ? 'bg-emerald-500 text-white'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30 transform -translate-y-0.5'
+                : 'bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200'
             }`}
           >
-            Manajemen Produk
+            <Package className="w-4 h-4" /> Manajemen Produk
           </button>
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
               activeTab === 'transactions'
-                ? 'bg-blue-500 text-white'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/30 transform -translate-y-0.5'
+                : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 hover:border-blue-200'
             }`}
           >
-            Riwayat Pembayaran ({transactions.length})
+            <Clock className="w-4 h-4" /> Riwayat Pembayaran ({transactions.length})
           </button>
           <button
             onClick={() => setActiveTab('posts')}
-            className={`px-4 py-2 rounded-lg font-bold transition-colors ${
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
               activeTab === 'posts'
-                ? 'bg-purple-500 text-white'
-                : 'bg-slate-200 text-slate-700 hover:bg-slate-300'
+                ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transform -translate-y-0.5'
+                : 'bg-white text-slate-500 hover:bg-fuchsia-50 hover:text-fuchsia-600 border border-slate-200 hover:border-fuchsia-200'
             }`}
           >
-            Manajemen Informasi ({posts.length})
+            <ImageIcon className="w-4 h-4" /> Manajemen Informasi ({posts.length})
           </button>
         </div>
       </header>
@@ -361,16 +380,16 @@ function Admin() {
             setShowForm(true);
             setEditingId(null);
           }}
-          className="mb-6 px-6 py-3 bg-emerald-500 text-white rounded-lg font-bold hover:bg-emerald-600 transition-colors"
+          className="mb-8 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/40 transition-all duration-300 flex items-center gap-2 transform hover:-translate-y-1"
         >
-          + Tambah Produk Baru
+          <Plus className="w-5 h-5" /> Tambah Produk Baru
         </button>
 
         {/* Form Modal */}
         {showForm && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-md w-full">
-              <h2 className="text-xl font-bold mb-4">
+          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+            <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-8 max-w-md w-full shadow-2xl transform transition-all">
+              <h2 className="text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
                 {editingId ? ' Edit Produk' : ' Tambah Produk Baru'}
               </h2>
 
@@ -469,17 +488,17 @@ function Admin() {
                   />
                 </div>
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex gap-3 pt-6">
                   <button
                     type="submit"
-                    className="flex-1 bg-emerald-500 text-white py-2 rounded-lg font-bold hover:bg-emerald-600 transition-colors"
+                    className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 transition-all duration-300"
                   >
                     {editingId ? 'Simpan Perubahan' : 'Tambahkan'}
                   </button>
                   <button
                     type="button"
                     onClick={handleCancel}
-                    className="flex-1 bg-slate-300 text-slate-700 py-2 rounded-lg font-bold hover:bg-slate-400 transition-colors"
+                    className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors"
                   >
                     Batal
                   </button>
@@ -490,11 +509,11 @@ function Admin() {
         )}
 
         {/* Products Table */}
-        <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+        <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="bg-slate-100 border-b border-slate-200">
+                <tr className="bg-slate-50/50 border-b border-slate-100">
                   <th className="px-6 py-4 text-left font-bold text-slate-700">ID</th>
                   <th className="px-6 py-4 text-left font-bold text-slate-700">Nama Produk</th>
                   <th className="px-6 py-4 text-left font-bold text-slate-700">SKU</th>
@@ -529,19 +548,23 @@ function Admin() {
                     <td className="px-6 py-4 text-center text-slate-600 font-semibold">
                       {item.location_code || '-'}
                     </td>
-                    <td className="px-6 py-4 text-center space-x-2">
-                      <button
-                        onClick={() => handleEdit(item)}
-                        className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 transition-colors"
-                      >
-                         Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="px-3 py-1 bg-rose-500 text-white rounded-lg text-sm font-bold hover:bg-rose-600 transition-colors"
-                      >
-                         Hapus
-                      </button>
+                    <td className="px-6 py-4 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleEdit(item)}
+                          className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
+                          title="Edit"
+                        >
+                          <Edit className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item.id)}
+                          className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                          title="Hapus"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -558,20 +581,23 @@ function Admin() {
         </div>
 
         {/* Summary */}
-        <div className="grid grid-cols-3 gap-4 mt-8">
-          <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
-            <p className="text-blue-600 font-semibold mb-2">Total Produk</p>
-            <p className="text-3xl font-black text-blue-700">{items.length}</p>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(99,102,241,0.1)] transition-all">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+            <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Produk</p>
+            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 relative z-10">{items.length}</p>
           </div>
-          <div className="bg-emerald-50 rounded-2xl p-6 border-2 border-emerald-200">
-            <p className="text-emerald-600 font-semibold mb-2">Total Stok</p>
-            <p className="text-3xl font-black text-emerald-700">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] transition-all">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+            <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Stok</p>
+            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500 relative z-10">
               {items.reduce((sum, item) => sum + (item.machine_stock || 0) + (item.warehouse_stock || 0), 0)}
             </p>
           </div>
-          <div className="bg-rose-50 rounded-2xl p-6 border-2 border-rose-200">
-            <p className="text-rose-600 font-semibold mb-2">Produk Habis</p>
-            <p className="text-3xl font-black text-rose-700">
+          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(244,63,94,0.1)] transition-all">
+            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-rose-100 to-pink-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+            <p className="text-slate-500 font-semibold mb-2 relative z-10">Produk Habis</p>
+            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-rose-500 to-pink-500 relative z-10">
               {items.filter(item => (item.machine_stock || 0) === 0 && (item.warehouse_stock || 0) === 0).length}
             </p>
           </div>
@@ -585,15 +611,15 @@ function Admin() {
             <h2 className="text-2xl font-black text-slate-900 mb-6">Riwayat Pembayaran</h2>
             
             {transactions.length === 0 ? (
-              <div className="bg-white rounded-2xl shadow-lg p-8 text-center">
-                <p className="text-slate-600 text-lg">Belum ada transaksi</p>
+              <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-12 text-center border border-slate-100">
+                <p className="text-slate-500 text-lg font-medium">Belum ada transaksi</p>
               </div>
             ) : (
-              <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
                 <div className="overflow-x-auto">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-slate-100 border-b border-slate-200">
+                      <tr className="bg-slate-50/50 border-b border-slate-100">
                         <th className="px-6 py-4 text-left font-bold text-slate-700 w-10"></th>
                         <th className="px-6 py-4 text-left font-bold text-slate-700">ID Transaksi</th>
                         <th className="px-6 py-4 text-left font-bold text-slate-700">Gate</th>
@@ -681,20 +707,23 @@ function Admin() {
             )}
 
             {/* Summary */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
-              <div className="bg-blue-50 rounded-2xl p-6 border-2 border-blue-200">
-                <p className="text-blue-600 font-semibold mb-2">Total Transaksi</p>
-                <p className="text-3xl font-black text-blue-700">{transactions.length}</p>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(59,130,246,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Transaksi</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 relative z-10">{transactions.length}</p>
               </div>
-              <div className="bg-emerald-50 rounded-2xl p-6 border-2 border-emerald-200">
-                <p className="text-emerald-600 font-semibold mb-2">Pembayaran Sukses</p>
-                <p className="text-3xl font-black text-emerald-700">
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Pembayaran Sukses</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500 relative z-10">
                   {transactions.filter(tx => tx.payment_status === 'PAID').length}
                 </p>
               </div>
-              <div className="bg-amber-50 rounded-2xl p-6 border-2 border-amber-200">
-                <p className="text-amber-600 font-semibold mb-2">Total Pendapatan</p>
-                <p className="text-3xl font-black text-amber-700">
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(245,158,11,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-amber-100 to-orange-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Pendapatan</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-500 to-orange-500 relative z-10">
                   Rp {transactions
                     .filter(tx => tx.payment_status === 'PAID')
                     .reduce((sum, tx) => sum + (tx.total_amount || 0), 0)
@@ -713,14 +742,14 @@ function Admin() {
                 setShowPostForm(true);
                 setEditingPostId(null);
               }}
-              className="mb-6 px-6 py-3 bg-purple-500 text-white rounded-lg font-bold hover:bg-purple-600 transition-colors"
+              className="mb-8 px-6 py-3 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white rounded-full font-bold hover:shadow-lg hover:shadow-fuchsia-500/40 transition-all duration-300 flex items-center gap-2 transform hover:-translate-y-1"
             >
-              + Tambah Post Baru
+              <Plus className="w-5 h-5" /> Tambah Informasi Baru
             </button>
 
             {showPostForm && (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-                <div className="bg-white rounded-2xl p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+                <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-8 max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl transform transition-all">
                   <h2 className="text-xl font-bold mb-4">
                     {editingPostId ? ' Edit Post' : ' Tambah Post Baru'}
                   </h2>
@@ -791,17 +820,17 @@ function Admin() {
                       <label htmlFor="is_published" className="text-sm font-semibold">Publikasikan</label>
                     </div>
 
-                    <div className="flex gap-3 pt-4">
+                    <div className="flex gap-3 pt-6">
                       <button
                         type="submit"
-                        className="flex-1 bg-purple-500 text-white py-2 rounded-lg font-bold hover:bg-purple-600 transition-colors"
+                        className="flex-1 bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white py-3 rounded-full font-bold hover:shadow-lg hover:shadow-fuchsia-500/30 transform hover:-translate-y-0.5 transition-all duration-300"
                       >
                         {editingPostId ? 'Simpan Perubahan' : 'Tambahkan Post'}
                       </button>
                       <button
                         type="button"
                         onClick={handlePostCancel}
-                        className="flex-1 bg-slate-300 text-slate-700 py-2 rounded-lg font-bold hover:bg-slate-400 transition-colors"
+                        className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors"
                       >
                         Batal
                       </button>
@@ -811,11 +840,11 @@ function Admin() {
               </div>
             )}
 
-            <div className="bg-white rounded-2xl shadow-lg overflow-hidden">
+            <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-slate-100 border-b border-slate-200">
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
                       <th className="px-6 py-4 text-left font-bold text-slate-700">ID</th>
                       <th className="px-6 py-4 text-left font-bold text-slate-700">Judul</th>
                       <th className="px-6 py-4 text-left font-bold text-slate-700">Status</th>
@@ -845,19 +874,23 @@ function Admin() {
                           <td className="px-6 py-4 text-slate-600 text-sm">
                             {new Date(post.created_at).toLocaleDateString('id-ID')}
                           </td>
-                          <td className="px-6 py-4 text-center space-x-2 whitespace-nowrap">
-                            <button
-                              onClick={() => handlePostEdit(post)}
-                              className="px-3 py-1 bg-blue-500 text-white rounded-lg text-sm font-bold hover:bg-blue-600 transition-colors"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handlePostDelete(post.id)}
-                              className="px-3 py-1 bg-rose-500 text-white rounded-lg text-sm font-bold hover:bg-rose-600 transition-colors"
-                            >
-                              Hapus
-                            </button>
+                          <td className="px-6 py-4 text-center">
+                            <div className="flex justify-center gap-2">
+                              <button
+                                onClick={() => handlePostEdit(post)}
+                                className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handlePostDelete(post.id)}
+                                className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                                title="Hapus"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))
