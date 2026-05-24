@@ -207,6 +207,72 @@ function App({ onGoToAdmin, onGoToLogin }) {
     }
   };
 
+  // Inject Midtrans Snap script
+  useEffect(() => {
+    const snapScriptUrl = 'https://app.sandbox.midtrans.com/snap/snap.js';
+    const clientKey = import.meta.env.VITE_MIDTRANS_CLIENT_KEY;
+
+    if (clientKey && clientKey !== "SB-Mid-client-ganti_dengan_client_key_anda") {
+      let scriptTag = document.createElement('script');
+      scriptTag.src = snapScriptUrl;
+      scriptTag.setAttribute('data-client-key', clientKey);
+      document.body.appendChild(scriptTag);
+
+      return () => {
+        document.body.removeChild(scriptTag);
+      }
+    }
+  }, []);
+
+  // Handle redirect callback from Midtrans
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const order_id = params.get('order_id');
+    const transaction_status = params.get('transaction_status');
+
+    if (order_id && (transaction_status === 'settlement' || transaction_status === 'capture')) {
+      // Clear URL params without reloading page
+      const url = new URL(window.location);
+      url.searchParams.delete('order_id');
+      url.searchParams.delete('transaction_status');
+      url.searchParams.delete('status_code');
+      window.history.pushState({}, '', url);
+
+      setIsProcessing(true);
+      setIsPaymentModalOpen(true);
+      setPaymentStatus(null);
+      
+      fetch(`${import.meta.env.VITE_API_BASE_URL}/api/payment/callback`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id, transaction_status })
+      })
+      .then(res => res.json())
+      .then(data => {
+        if (data.status === 'SUCCESS') {
+          setPaymentStatus('success');
+          showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.', 'success');
+          setTimeout(async () => {
+            setCart({});
+            setIsPaymentModalOpen(false);
+            setPaymentStatus(null);
+            setIsProcessing(false);
+            fetchItems();
+          }, 3000);
+        } else {
+          setPaymentStatus('failed');
+          showNotification('Gagal memverifikasi pembayaran dengan mesin!', 'error');
+          setIsProcessing(false);
+        }
+      })
+      .catch(err => {
+        setPaymentStatus('failed');
+        showNotification(` Error konfirmasi: ${err.message}`, 'error');
+        setIsProcessing(false);
+      });
+    }
+  }, []);
+
   // Helper function to format gate display
   const formatGateDisplay = (gate) => {
     if (gate === "unknown") return "Belum terhubung ke gate";
@@ -343,7 +409,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
     setIsProcessing(true);
 
     try {
-      // Step 1: Create transaction
+      // Step 1: Create transaction di DB
       const gateNum = currentGate.replace(/\D/g, '') || '1';
 
       const checkoutRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/checkout`, {
@@ -352,7 +418,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
         body: JSON.stringify({
           gate_id: parseInt(gateNum),
           items_cart: cart,
-          user_id: user?.user_id || null  // Pass user_id if logged in, null for guest
+          user_id: user?.user_id || null
         })
       });
 
@@ -362,12 +428,49 @@ function App({ onGoToAdmin, onGoToLogin }) {
       }
 
       const transactionData = await checkoutRes.json();
-      setTransactionId(transactionData.transaction_id);
-      setIsPaymentModalOpen(true);
-      setIsProcessing(false);
-      setIsCartOpen(false);
+      const transaction_id = transactionData.transaction_id;
 
-      console.log(' Transaction created:', transactionData);
+      // Step 2: Minta Snap Token dari backend
+      const tokenRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/midtrans/token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          transaction_id: transaction_id
+        })
+      });
+
+      if (!tokenRes.ok) {
+        const errData = await tokenRes.json();
+        throw new Error(errData.detail || "Gagal mendapatkan token Midtrans");
+      }
+
+      const tokenData = await tokenRes.json();
+
+      // Tutup keranjang agar UI fokus ke pembayaran
+      setIsCartOpen(false);
+      setIsProcessing(false);
+
+      // Step 3: Tampilkan Pop-up Midtrans
+      if (window.snap) {
+        window.snap.pay(tokenData.token, {
+          onSuccess: function (result) {
+            // Pembayaran Berhasil! Beritahu backend.
+            handlePaymentSuccess(transaction_id, result);
+          },
+          onPending: function (result) {
+            showNotification('Pembayaran tertunda. Silakan selesaikan pembayaran Anda.', 'info');
+          },
+          onError: function (result) {
+            showNotification('Pembayaran gagal! Silakan coba lagi.', 'error');
+          },
+          onClose: function () {
+            showNotification('Anda menutup popup pembayaran sebelum menyelesaikannya', 'error');
+          }
+        })
+      } else {
+        throw new Error("Midtrans Snap belum dimuat atau Client Key belum di-setup di frontend/.env");
+      }
+
     } catch (err) {
       console.error("Checkout error:", err);
       showNotification(` Error: ${err.message}`, 'error');
@@ -375,19 +478,20 @@ function App({ onGoToAdmin, onGoToLogin }) {
     }
   };
 
-  const handlePayment = async () => {
-    if (!transactionId) return;
-
+  const handlePaymentSuccess = async (transaction_id, midtransResult) => {
     setIsProcessing(true);
+    // Tampilkan modal dummy kita hanya untuk memunculkan pesan "Pembayaran Berhasil"
+    setIsPaymentModalOpen(true);
+    setPaymentStatus(null);
 
     try {
-      // Step 2: Process payment
+      // Panggil endpoint /api/payment kita untuk memotong stok dan menjatuhkan barang
       const paymentRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          transaction_id: transactionId,
-          payment_method: paymentMethod
+          transaction_id: transaction_id,
+          payment_method: 'MIDTRANS' // Flag khusus yang kita buat agar transaksi selalu SUKSES
         })
       });
 
@@ -397,87 +501,24 @@ function App({ onGoToAdmin, onGoToLogin }) {
         setPaymentStatus('success');
         showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.', 'success');
 
-        // Send MQTT command to ESP32 for dispensed items
-        sendToMachine(cart, currentGate);
-
-        // Check if we need to trigger restock based on new machine_stock
-        if (paymentData.dispensed_items && paymentData.dispensed_items.length > 0) {
-          const numStr = String(currentGate).replace(/\D/g, '') || '1';
-          const machineId = `VM${numStr.padStart(3, '0')}`;
-
-          for (const dispensed of paymentData.dispensed_items) {
-            if (dispensed.remaining_machine_stock < 2) {
-              // Send RESTOCK command to MQTT
-              if (mqttClientRef.current && mqttClientRef.current.connected) {
-                const restockTopic = `vending/${machineId}/cmd`;
-                const restockPayload = {
-                  command: "RESTOCK",
-                  item_id: dispensed.item_id,
-                  location_id: dispensed.location_id
-                };
-                mqttClientRef.current.publish(restockTopic, JSON.stringify(restockPayload));
-                console.log('MQTT sent RESTOCK command:', { topic: restockTopic, payload: restockPayload });
-              }
-            }
-          }
-        }
-
         // Clear cart and close modal after success
         setTimeout(async () => {
           setCart({});
           setIsPaymentModalOpen(false);
           setPaymentStatus(null);
-          setTransactionId(null);
           setIsProcessing(false);
-
-          // Refresh items (stock already decremented atomically in backend)
           await fetchItems();
-        }, 2000);
+        }, 3000);
       } else {
         setPaymentStatus('failed');
-        showNotification('Pembayaran gagal! Silahkan coba lagi.', 'error');
+        showNotification('Gagal memverifikasi pembayaran dengan mesin!', 'error');
         setIsProcessing(false);
       }
-
-      console.log('💳 Payment response:', paymentData);
     } catch (err) {
-      console.error("Payment error:", err);
+      console.error("Payment confirmation error:", err);
       setPaymentStatus('failed');
-      showNotification(` Error pembayaran: ${err.message}`, 'error');
+      showNotification(` Error konfirmasi: ${err.message}`, 'error');
       setIsProcessing(false);
-    }
-  };
-
-  const sendToMachine = (cartData, gateId) => {
-    if (!mqttClientRef.current || !mqttClientRef.current.connected) {
-      console.warn(' MQTT not connected, skipping send');
-      return;
-    }
-
-    try {
-      // Build items array - for qty > 1, duplicate the item ID
-      const items = [];
-      for (const itemId in cartData) {
-        const { qty } = cartData[itemId];
-        for (let i = 0; i < qty; i++) {
-          items.push(parseInt(itemId));
-        }
-      }
-
-      // Get machine ID from gate (e.g., "gate_1" -> "VM001")
-      const numStr = String(gateId).replace(/\D/g, '') || '1';
-      const machineId = `VM${numStr.padStart(3, '0')}`;
-
-      // MQTT topic and simple payload
-      const topic = `vending/${machineId}/cmd`;
-      const payload = {
-        items: items
-      };
-
-      mqttClientRef.current.publish(topic, JSON.stringify(payload));
-      console.log(' MQTT sent to ESP32:', { topic, payload });
-    } catch (err) {
-      console.error(' Error sending MQTT:', err);
     }
   };
 
@@ -535,19 +576,43 @@ function App({ onGoToAdmin, onGoToLogin }) {
         )}
 
         {/* 1. NAVBAR (Glassmorphism Effect) - FIXED at top */}
-        <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-4 flex items-center justify-between transition-all">
-          {/* Logo and Gate */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black">
-              F
-            </div>
-            <div>
-              <span className="text-xl font-black tracking-tight text-slate-900">
+        <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-3 flex items-center justify-between transition-all">
+          <div className="flex items-center gap-6">
+            {/* Logo */}
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black shrink-0">
+                F
+              </div>
+              <span className="text-xl font-black tracking-tight text-slate-900 hidden md:block">
                 FRESH<span className="text-emerald-500">MART</span>
               </span>
-              <div className="text-xs text-emerald-600 font-semibold">
-                {formatGateDisplay(currentGate)}
+            </div>
+
+            {/* Gate Selector */}
+            <div className="flex flex-col bg-amber-50/80 border border-amber-200/60 rounded-xl px-3 py-1.5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-amber-800">Anda ada di:</span>
+                <select
+                  value={currentGate}
+                  onChange={(e) => {
+                    const newGate = e.target.value;
+                    setCurrentGate(newGate);
+                    localStorage.setItem('current_gate', newGate);
+                    const url = new URL(window.location);
+                    url.searchParams.set('gate', newGate);
+                    window.history.pushState({}, '', url);
+                  }}
+                  className="text-sm font-black text-amber-900 bg-transparent outline-none cursor-pointer"
+                >
+                  <option value="unknown" disabled>Pilih Gate...</option>
+                  <option value="gate_1">Gate 1</option>
+                  <option value="gate_2">Gate 2</option>
+                  <option value="gate_3">Gate 3</option>
+                </select>
               </div>
+              <span className="text-[10px] font-semibold text-amber-700/80 mt-0.5 max-w-[180px] leading-tight">
+                Pastikan nomor gate sesuai dengan lokasi fisik mesin
+              </span>
             </div>
           </div>
 
@@ -897,58 +962,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 </div>
               )}
 
-              {!paymentStatus && (
-                <>
-                  <div className="text-center mb-8">
-                    <h2 className="text-2xl font-black text-slate-800">Pembayaran QRIS</h2>
-                    <p className="text-slate-500 font-medium mt-1">Scan kode QR di bawah menggunakan aplikasi E-Wallet atau M-Banking Anda.</p>
+              {!paymentStatus && isProcessing && (
+                <div className="text-center py-6">
+                  <div className="flex justify-center mb-6">
+                    <Loader2 size={60} className="animate-spin text-emerald-500 drop-shadow-md" />
                   </div>
-
-                  {/* Mock QR Code Container */}
-                  <div className="bg-white p-6 rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.06)] border border-slate-100 mb-8 flex flex-col items-center justify-center relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-gradient-to-tr from-emerald-50 to-teal-50 opacity-50"></div>
-                    <div className="relative z-10 w-48 h-48 bg-white border-2 border-slate-100 rounded-2xl flex items-center justify-center mb-4 shadow-sm group-hover:scale-105 transition-transform duration-500">
-                      <QrCode size={120} className="text-slate-800" strokeWidth={1.5} />
-                    </div>
-                    <div className="relative z-10 text-center">
-                      <p className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-1">Total Tagihan</p>
-                      <p className="text-3xl font-black text-emerald-600">Rp {cartTotal.toLocaleString('id-ID')}</p>
-                    </div>
-                  </div>
-
-                  <div className="space-y-3">
-                    <button
-                      onClick={handlePayment}
-                      disabled={isProcessing}
-                      className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white py-4 rounded-full font-bold text-lg hover:shadow-lg transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-emerald-500/30 transform hover:-translate-y-0.5"
-                    >
-                      {isProcessing ? (
-                        <div className="flex items-center justify-center gap-2">
-                          <Loader2 size={20} className="animate-spin" />
-                          <span>Menunggu Konfirmasi...</span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center gap-2">
-                          <CheckCircle2 size={20} />
-                          <span>Simulasi Berhasil</span>
-                        </div>
-                      )}
-                    </button>
-
-                    <button
-                      onClick={() => {
-                        setIsPaymentModalOpen(false);
-                        setTransactionId(null);
-                        setPaymentStatus(null);
-                        setIsCartOpen(true);
-                      }}
-                      disabled={isProcessing}
-                      className="w-full py-3 text-slate-500 hover:text-slate-800 font-bold transition-colors"
-                    >
-                      Batalkan Transaksi
-                    </button>
-                  </div>
-                </>
+                  <h3 className="text-xl font-bold text-slate-800 mb-2">Memverifikasi Pembayaran...</h3>
+                  <p className="text-slate-500 font-medium">Mohon tunggu sebentar, sistem sedang mencatat transaksi Anda.</p>
+                </div>
               )}
             </div>
           </div>

@@ -85,7 +85,7 @@ function Admin() {
 
   const fetchItems = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
       const data = await res.json();
       setItems(data);
     } catch (err) {
@@ -95,7 +95,7 @@ function Admin() {
 
   const fetchPosts = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/posts`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/posts`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
       const data = await res.json();
       setPosts(data);
     } catch (err) {
@@ -105,7 +105,7 @@ function Admin() {
 
   const fetchTransactions = async () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/transactions`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/transactions`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
       const data = await res.json();
       setTransactions(data);
     } catch (err) {
@@ -122,7 +122,7 @@ function Admin() {
     // Fetch items if not already cached
     if (!txItems[txId]) {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transaction/${txId}/items`);
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transaction/${txId}/items`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
         if (res.ok) {
           const data = await res.json();
           setTxItems(prev => ({ ...prev, [txId]: data }));
@@ -154,7 +154,7 @@ function Admin() {
         // Update
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${editingId}`, {
           method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
           body: JSON.stringify(formData)
         });
         if (res.ok) {
@@ -165,7 +165,7 @@ function Admin() {
         // Create
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
           body: JSON.stringify(formData)
         });
         if (res.ok) {
@@ -200,7 +200,7 @@ function Admin() {
     if (confirm("Yakin ingin menghapus produk ini?")) {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${id}`, {
-          method: 'DELETE'
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
         if (res.ok) {
           alert("Produk berhasil dihapus!");
@@ -249,7 +249,7 @@ function Admin() {
       
       const res = await fetch(url, {
         method,
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify(payload)
       });
       
@@ -283,7 +283,7 @@ function Admin() {
     if (confirm("Yakin ingin menghapus post ini?")) {
       try {
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/posts/${id}`, {
-          method: 'DELETE'
+          method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
         });
         if (res.ok) {
           alert("Post berhasil dihapus!");

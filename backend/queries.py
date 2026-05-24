@@ -8,6 +8,7 @@ import asyncpg
 from datetime import datetime, timedelta
 import bcrypt
 import re
+from auth import create_access_token
 
 # ===== PAYMENT MANAGEMENT (Demo Payment Gateway) =====
 
@@ -89,7 +90,7 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
     pool = DatabasePool.get_pool()
     
     # Validate payment method
-    valid_methods = ['CASH', 'QRIS', 'TRANSFER', 'CARD']
+    valid_methods = ['CASH', 'QRIS', 'TRANSFER', 'CARD', 'MIDTRANS']
     if payment_method not in valid_methods:
         raise HTTPException(status_code=400, detail=f"Invalid payment method. Choose from: {', '.join(valid_methods)}")
     
@@ -115,8 +116,11 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                     )
                     raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
                 
-                # DEMO: Simulate successful payment (90% success rate)
-                is_success = random.random() < 0.9
+                # DEMO: Simulate successful payment (90% success rate), but MIDTRANS always success if reached here
+                if payment_method == 'MIDTRANS':
+                    is_success = True
+                else:
+                    is_success = random.random() < 0.9
                 
                 payment_code = f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
                 payment_status = 'SUCCESS' if is_success else 'FAILED'
@@ -157,6 +161,7 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                             
                         dispensed_items.append({
                             "item_id": tx_item['item_id'],
+                            "quantity": tx_item['quantity'],
                             "remaining_machine_stock": result['machine_stock'],
                             "location_id": result['location_id']
                         })
@@ -688,7 +693,12 @@ async def login_user(username: str, password: str) -> Dict:
                 raise HTTPException(status_code=401, detail="Invalid username or password")
             
             # Login successful
+            access_token = create_access_token(
+                data={"sub": str(user['id']), "username": user['username'], "role": user['role'] or 'user'}
+            )
             return {
+                "access_token": access_token,
+                "token_type": "bearer",
                 "user_id": user['id'],
                 "username": user['username'],
                 "email": user['email'],

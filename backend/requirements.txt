@@ -5,3 +5,6 @@ pydantic
 bcrypt
 python-dotenv
 requests
+PyJWT
+paho-mqtt
+slowapi

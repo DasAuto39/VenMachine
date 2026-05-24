@@ -7,7 +7,7 @@ export default function Login() {
   const [isRegister, setIsRegister] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  
+
   // Register form
   const [registerForm, setRegisterForm] = useState({
     username: '',
@@ -17,7 +17,7 @@ export default function Login() {
     full_name: '',
     phone: ''
   });
-  
+
   // Login form
   const [loginForm, setLoginForm] = useState({
     username: '',
@@ -83,9 +83,9 @@ export default function Login() {
         setError('');
         // Switch to login form
         setIsRegister(false);
-        setLoginForm({ 
-          username: registerForm.username, 
-          password: '' 
+        setLoginForm({
+          username: registerForm.username,
+          password: ''
         });
         setRegisterForm({
           username: '',
@@ -141,8 +141,9 @@ export default function Login() {
         };
         localStorage.setItem('user', JSON.stringify(user));
         localStorage.setItem('authenticated', 'true');
+        localStorage.setItem('token', data.access_token);
         // Navigate to shopping page
-        navigate('/user');
+        navigate('/user?gate=gate_1');
       }
     } catch (err) {
       setError('Error: ' + err.message);
@@ -153,18 +154,18 @@ export default function Login() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50 text-slate-800 font-sans selection:bg-emerald-200 relative overflow-hidden flex items-center justify-center">
-      
+
       {/* Decorative Background Elements */}
       <div className="fixed inset-0 pointer-events-none z-0">
         {/* Large floating blob - top right */}
         <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-emerald-200 rounded-full blur-3xl opacity-20 animate-float"></div>
-        
+
         {/* Medium blob - bottom left */}
         <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-80 h-80 bg-teal-200 rounded-full blur-3xl opacity-15 animate-float-reverse"></div>
-        
+
         {/* Small blob - center */}
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-emerald-300 rounded-full blur-3xl opacity-10 animate-float" style={{animationDelay: '1s'}}></div>
-        
+        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-emerald-300 rounded-full blur-3xl opacity-10 animate-float" style={{ animationDelay: '1s' }}></div>
+
         {/* Grid pattern overlay */}
         <div className="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:50px_50px]"></div>
       </div>
@@ -172,7 +173,7 @@ export default function Login() {
       {/* Content */}
       <div className="relative z-10 w-full max-w-md mx-4">
         <div className="bg-white/80 backdrop-blur-lg border border-white/20 rounded-3xl shadow-2xl p-8">
-          
+
           {/* Header */}
           <div className="text-center mb-8">
             <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 text-white text-2xl font-black mx-auto mb-4">
@@ -230,7 +231,7 @@ export default function Login() {
                 className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
                 <div className="flex items-center justify-center gap-2">
-                  {loading ? <><Loader2 size={18} className="animate-spin"/> Loading...</> : 'Login'}
+                  {loading ? <><Loader2 size={18} className="animate-spin" /> Loading...</> : 'Login'}
                 </div>
               </button>
 
@@ -342,7 +343,7 @@ export default function Login() {
                 className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-green-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
                 <div className="flex items-center justify-center gap-2">
-                  {loading ? <><Loader2 size={18} className="animate-spin"/> Loading...</> : <><CheckCircle2 size={18} /> Daftar</>}
+                  {loading ? <><Loader2 size={18} className="animate-spin" /> Loading...</> : <><CheckCircle2 size={18} /> Daftar</>}
                 </div>
               </button>
 
@@ -373,7 +374,7 @@ export default function Login() {
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-slate-200/50 flex items-center justify-between">
             <p className="text-xs text-slate-400">
-               Login
+              Login
             </p>
             <button
               onClick={() => navigate('/user')}

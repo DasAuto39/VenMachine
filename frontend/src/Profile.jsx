@@ -32,7 +32,7 @@ function Profile() {
   const fetchTransactions = async (userId) => {
     try {
       setIsLoading(true);
-      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/user/${userId}/transactions`);
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/user/${userId}/transactions`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
       if (res.ok) {
         const data = await res.json();
         setTransactions(data);
@@ -61,7 +61,7 @@ function Profile() {
     // Fetch items if not already cached
     if (!txItems[txId]) {
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transaction/${txId}/items`);
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/transaction/${txId}/items`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
         if (res.ok) {
           const data = await res.json();
           setTxItems(prev => ({ ...prev, [txId]: data }));
