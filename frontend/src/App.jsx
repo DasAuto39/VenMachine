@@ -47,6 +47,10 @@ function App({ onGoToAdmin, onGoToLogin }) {
       const savedGate = localStorage.getItem('current_gate');
       if (savedGate) {
         setCurrentGate(savedGate);
+        // Automatically restore the gate in the URL so it's always visible
+        const newUrl = new URL(window.location);
+        newUrl.searchParams.set('gate', savedGate);
+        window.history.replaceState({}, '', newUrl);
       }
     }
   }, []);

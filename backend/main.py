@@ -333,10 +333,13 @@ async def get_midtrans_token(request: Request, req: MidtransTokenRequest):
         "Authorization": f"Basic {auth_string}"
     }
     
-    # Ambil URL asal (origin) dari frontend agar dinamis (mendukung IP LAN atau domain)
-    frontend_url = request.headers.get("origin")
+    # Gunakan 'referer' untuk mendapatkan URL penuh (termasuk ?gate=...), jika tidak ada, gunakan 'origin'
+    frontend_url = request.headers.get("referer") or request.headers.get("origin")
     if not frontend_url:
-        raise HTTPException(status_code=400, detail="Tidak dapat mendeteksi Origin dari browser. Pastikan web tidak memblokir header Origin.")
+        raise HTTPException(status_code=400, detail="Tidak dapat mendeteksi Origin/Referer dari browser.")
+    
+    # Referer kadang berakhiran dengan trailing slash, kita bersihkan jika Midtrans memintanya
+    # Tapi tidak apa-apa karena kita ingin Midtrans mengembalikan URL utuh.
     
     payload = {
         "transaction_details": {
@@ -432,7 +435,9 @@ async def get_all_items_endpoint(current_user: dict = Depends(get_admin_user)):
 @app.post("/api/admin/items")
 async def create_item_endpoint(item: ItemCreate, current_user: dict = Depends(get_admin_user)):
     """Create a new item"""
-    return await create_item(item.name, item.sku, item.price, item.machine_stock, item.warehouse_stock, item.location_id, item.description, item.image_url, item.category)
+    res = await create_item(item.name, item.sku, item.price, item.machine_stock, item.warehouse_stock, item.location_id, item.description, item.image_url, item.category)
+    await publish_active_config_async()
+    return res
 
 # Endpoint 6: Update item
 @app.put("/api/admin/items/{item_id}")
@@ -457,14 +462,17 @@ async def update_item_endpoint(item_id: int, item: ItemUpdate, current_user: dic
         update_kwargs['description'] = item.description
     if item.image_url is not None:
         update_kwargs['image_url'] = item.image_url
-    
-    return await update_item(item_id, **update_kwargs)
+    res = await update_item(item_id, **update_kwargs)
+    await publish_active_config_async()
+    return res
 
 # Endpoint 7: Delete item
 @app.delete("/api/admin/items/{item_id}")
 async def delete_item_endpoint(item_id: int, current_user: dict = Depends(get_admin_user)):
     """Delete an item"""
-    return await delete_item(item_id)
+    res = await delete_item(item_id)
+    await publish_active_config_async()
+    return res
 
 # Endpoint: Restock Item
 @app.post("/api/items/{item_id}/restock")

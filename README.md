@@ -37,63 +37,46 @@ Jika `machine_stock` menipis, mesin akan secara otomatis mengisi ulang dari `war
 
 ## 📡 Komunikasi MQTT (Web ↔ ESP32)
 
-Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainkan menggunakan perantara **Broker MQTT** (misalnya HiveMQ) agar sistem bisa berjalan *asynchronous* dan *real-time*.
+Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainkan menggunakan perantara **Broker MQTT** (contoh: HiveMQ) agar sistem berjalan *asynchronous* dan *real-time*.
 
-### 1. Perintah Keluarkan Barang / Dispense (Web → ESP32)
-Saat pelanggan selesai membayar, Web akan mem-publish perintah ke mesin.
+### 1. Meminta Konfigurasi Aktif (ESP32 → Web)
+Digunakan oleh ESP32 (biasanya saat baru menyala/restart) untuk menanyakan index motor mana saja yang saat ini ada produknya di database.
+*   **Topic**: `vending/request_config`
+*   **Arah**: ESP32 👉 Web (Backend)
+*   **Payload**: *(Kosong / Bebas)*
 
-*   **Topic**: `vending/{machineId}/cmd`  *(Contoh: `vending/VM001/cmd` untuk Gate 1)*
-*   **Arah**: Web/Frontend 👉 ESP32
+### 2. Sinkronisasi Konfigurasi (Web → ESP32)
+Merupakan balasan dari Web saat ESP32 melakukan request, ATAU dipancarkan otomatis (Broadcast) oleh Web **setiap kali Admin menambah produk baru, mengedit, atau menghapus produk** di website.
+*   **Topic**: `vending/config`
+*   **Arah**: Web (Backend) 👉 ESP32
 *   **Payload JSON**:
-    Berisi *array* dari ID barang yang dibeli. Jika pembeli membeli 2 buah barang dengan ID 1, maka angka 1 akan dikirim dua kali.
+    Berisi *array* dari ID Barang (`item_id`) yang sedang aktif di database. Operator mesin secara manual telah menyesuaikan bahwa ID barang di database sama dengan letak motor fisik mesin.
     ```json
     {
-      "items": [1, 1, 2]
+      "active_indexes": [1, 2, 3, 5]
     }
     ```
 
-### 2. Laporan Lintas-Cek Pengeluaran Fisik (ESP32 → Web)
-Setiap kali ESP32 *selesai* menggerakkan motor untuk 1 buah barang, ESP32 harus melapor ke Web sebagai bukti (*crosscheck*) bahwa barang benar-benar keluar secara fisik.
-
-*   **Topic**: `vending/stock`
-*   **Arah**: ESP32 👉 Web/Frontend
+### 3. Perintah Keluarkan Barang / Dispense (Web → ESP32)
+Saat pelanggan selesai membayar via Midtrans, Web akan mem-publish perintah ke mesin spesifik (gate tertentu) untuk menjatuhkan barang.
+*   **Topic**: `vending/{machineId}/cmd` *(Contoh: `vending/VM001/cmd` untuk Gate 1)*
+*   **Arah**: Web (Backend) 👉 ESP32
 *   **Payload JSON**:
+    Berisi *array* dari ID Barang di Database (`item_id`) yang dibeli. Karena `item_id` sudah disamakan dengan index motor fisik oleh operator, ESP32 bisa langsung memutar motor sesuai angka ini.
     ```json
     {
-      "item": 1
-    }
-    ```
-*(Catatan: Pengurangan stok di database sudah dilakukan secara instan di awal pembayaran untuk mencegah pembeli lain mengambil stok yang sama / menghindari race-condition. Pesan MQTT ini digunakan web semata-mata sebagai log verifikasi fisik).*
-
-### 2. Perintah Isi Ulang / Restock (Web → ESP32)
-Jika setelah pembayaran `machine_stock` turun di bawah 2 unit, Web akan memerintahkan ESP32 untuk memindahkan barang dari belakang ke depan.
-
-*   **Topic**: `vending/{machineId}/cmd`
-*   **Arah**: Web/Frontend 👉 ESP32
-*   **Payload JSON**:
-    ```json
-    {
-      "command": "RESTOCK",
-      "item_id": 1,
-      "location_id": 3
+      "items": [101, 101, 105]
     }
     ```
 
-### 3. Konfirmasi Isi Ulang Selesai (ESP32 → Web)
-Setelah motor pada ESP32 selesai memindahkan barang ke depan secara fisik, ESP32 **WAJIB** melapor balik ke Web agar tampilan stok di layar dan di database di-update.
+### 4. Laporan Eksekusi Dispense (ESP32 → Web)
+Setiap kali ESP32 *selesai* menjatuhkan 1 buah barang fisik, ESP32 melapor ke Web agar Web menampilkan notifikasi pop-up sukses ke pengguna, dan Backend mencatatnya ke tabel Log (*crosscheck*).
+*   **Topik 1 (Untuk Pop-Up Frontend)**: `vending/stock`
+    *   **Payload JSON**: `{"item": 101}`
+*   **Topik 2 (Untuk Log Database)**: `vending/{machineId}/restock` *(Contoh: `vending/VM001/restock`)*
+    *   **Payload JSON**: `{"item": 101}`
 
-*   **Topic**: `vending/{machineId}/status`
-*   **Arah**: ESP32 👉 Web/Frontend
-*   **Payload JSON**:
-    ```json
-    {
-      "status": "RESTOCK_DONE",
-      "item_id": 1
-    }
-    ```
-
-> **Catatan untuk tim Hardware (ESP32):** ESP32 bebas melakukan *restock* secara mandiri (misal: jika mendeteksi barang habis lewat sensor infrared) tanpa harus menunggu perintah `RESTOCK` dari web. Web akan selalu *listen* (mendengarkan) status `RESTOCK_DONE` dan segera mengupdate database ketika pesan tersebut diterima.
-
+*(Catatan: Pengurangan stok utama di database sudah dilakukan seketika saat pembayaran Midtrans sukses untuk menghindari race-condition. Pesan MQTT dari ESP32 ini digunakan semata-mata sebagai notifikasi layar dan log verifikasi fisik).*
 ---
 
 ## 🔌 Dokumentasi API Utama (FastAPI)

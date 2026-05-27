@@ -18,6 +18,7 @@ def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("✅ Berhasil terkoneksi ke MQTT Broker")
         client.subscribe("vending/+/restock")
+        client.subscribe("vending/request_config")
     else:
         logger.error(f"❌ Gagal terkoneksi ke MQTT Broker, return code {rc}")
 
@@ -49,6 +50,35 @@ async def _log_dispense(machine_id, item_id):
         except Exception as e:
             logger.error(f"❌ Gagal mencatat hardware dispense: {e}")
 
+async def _fetch_and_publish_config():
+    """Mengambil index/lokasi aktif dari DB dan mempublishnya ke ESP32 secara global"""
+    pool = DatabasePool.get_pool()
+    if not pool:
+        logger.error("DB Pool belum inisiasi, gagal fetch config.")
+        return
+        
+    async with pool.acquire() as connection:
+        try:
+            # Ambil semua id barang (yang bertindak sebagai index fisik bagi ESP32)
+            rows = await connection.fetch("SELECT id FROM items WHERE machine_stock > 0 OR warehouse_stock > 0")
+            
+            # Buat list active_indexes murni dari ID barang
+            active_indexes = [row['id'] for row in rows]
+            
+            topic = "vending/config"
+            payload = {
+                "active_indexes": active_indexes
+            }
+            
+            client.publish(topic, json.dumps(payload), qos=1)
+            logger.info(f"📤 MQTT Config terkirim ke {topic}: {payload}")
+        except Exception as e:
+            logger.error(f"❌ Gagal mengambil/mengirim MQTT config: {e}")
+
+async def publish_active_config_async():
+    """Fungsi yang bisa dipanggil dari FastAPI route"""
+    await _fetch_and_publish_config()
+
 def on_message(client, userdata, msg):
     try:
         topic = msg.topic
@@ -64,6 +94,10 @@ def on_message(client, userdata, msg):
             if item_id is not None:
                 # Karena on_message berjalan di thread Paho MQTT, kita gunakan asyncio.run untuk async DB call
                 asyncio.run(_log_dispense(machine_id, item_id))
+        elif topic == 'vending/request_config':
+            logger.info(f"ESP32 meminta konfigurasi index terbaru...")
+            asyncio.run(_fetch_and_publish_config())
+            
     except Exception as e:
         logger.error(f"❌ Error memproses pesan MQTT: {e}")
 
