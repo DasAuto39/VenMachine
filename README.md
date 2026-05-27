@@ -43,7 +43,12 @@ Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainka
 Digunakan oleh ESP32 (biasanya saat baru menyala/restart) untuk menanyakan index motor mana saja yang saat ini ada produknya di database.
 *   **Topic**: `vending/request_config`
 *   **Arah**: ESP32 👉 Web (Backend)
-*   **Payload**: *(Kosong / Bebas)*
+*   **Payload JSON**:
+    ```json
+    {
+      "msg": "REQUEST_DATA_BARANG"
+    }
+    ```
 
 ### 2. Sinkronisasi Konfigurasi (Web → ESP32)
 Merupakan balasan dari Web saat ESP32 melakukan request, ATAU dipancarkan otomatis (Broadcast) oleh Web **setiap kali Admin menambah produk baru, mengedit, atau menghapus produk** di website.

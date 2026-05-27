@@ -95,9 +95,13 @@ def on_message(client, userdata, msg):
                 # Karena on_message berjalan di thread Paho MQTT, kita gunakan asyncio.run untuk async DB call
                 asyncio.run(_log_dispense(machine_id, item_id))
         elif topic == 'vending/request_config':
-            logger.info(f"ESP32 meminta konfigurasi index terbaru...")
-            asyncio.run(_fetch_and_publish_config())
-            
+            try:
+                data = json.loads(payload_str)
+                if data.get('msg') == 'REQUEST_DATA_BARANG':
+                    logger.info(f"ESP32 meminta konfigurasi index terbaru...")
+                    asyncio.run(_fetch_and_publish_config())
+            except json.JSONDecodeError:
+                logger.warning("Pesan request_config bukan JSON yang valid.")
     except Exception as e:
         logger.error(f"❌ Error memproses pesan MQTT: {e}")
 
