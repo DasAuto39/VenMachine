@@ -11,5 +11,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy seluruh kode FastAPI Anda ke dalam container
 COPY . .
 
+# Expose port untuk Back4App
+EXPOSE 8000
+
 # Perintah untuk menyalakan Uvicorn (Host 0.0.0.0 wajib agar bisa diakses dari luar container)
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
