@@ -67,7 +67,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
           script.src = 'https://cdn.jsdelivr.net/npm/mqtt@5.0.0/dist/mqtt.min.js';
           script.onload = () => {
             if (window.mqtt) {
-              const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
+              const client = window.mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
 
               client.on('connect', () => {
                 console.log(' MQTT Connected to broker');
@@ -117,7 +117,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
           document.head.appendChild(script);
         } else if (window.mqtt && !mqttClientRef.current) {
           // Library already loaded
-          const client = window.mqtt.connect('ws://broker.hivemq.com:8000/mqtt');
+          const client = window.mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
 
           client.on('connect', () => {
             console.log(' MQTT Connected to broker');
