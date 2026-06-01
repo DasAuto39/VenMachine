@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 import uuid
 
-//client = mqtt.Client(client_id="venmachine_backend_api", clean_session=True)
+#client = mqtt.Client(client_id="venmachine_backend_api", clean_session=True)
 
 # Initialize MQTT Client dengan ID unik agar tidak bentrok antara localhost dan Back4App
 client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
