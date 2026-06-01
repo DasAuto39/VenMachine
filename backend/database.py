@@ -20,7 +20,8 @@ class DatabasePool:
     async def init(cls) -> asyncpg.Pool:
         """Initialize database pool pada startup"""
         if cls._pool is None:
-            cls._pool = await asyncpg.create_pool(DB_URL)
+            # statement_cache_size=0 diperlukan agar asyncpg tidak crash saat menggunakan Supabase IPv4 Pooler (Transaction Mode)
+            cls._pool = await asyncpg.create_pool(DB_URL, statement_cache_size=0)
         return cls._pool
     
     @classmethod
