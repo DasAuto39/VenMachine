@@ -11,13 +11,20 @@ MQTT_KEEPALIVE = 60
 
 logger = logging.getLogger(__name__)
 
-# Initialize MQTT Client
-client = mqtt.Client(client_id="venmachine_backend_api", clean_session=True)
+import uuid
+
+//client = mqtt.Client(client_id="venmachine_backend_api", clean_session=True)
+
+# Initialize MQTT Client dengan ID unik agar tidak bentrok antara localhost dan Back4App
+client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
+client = mqtt.Client(client_id=client_id, clean_session=True)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("✅ Berhasil terkoneksi ke MQTT Broker")
         client.subscribe("vending/+/restock")
+# Initialize MQTT Client
+
         client.subscribe("vending/request_config")
     else:
         logger.error(f"❌ Gagal terkoneksi ke MQTT Broker, return code {rc}")
