@@ -55,10 +55,10 @@ Merupakan balasan dari Web saat ESP32 melakukan request, ATAU dipancarkan otomat
 *   **Topic**: `vending/config`
 *   **Arah**: Web (Backend) 👉 ESP32
 *   **Payload JSON**:
-    Berisi *array* dari ID Barang (`item_id`) yang sedang aktif di database. Operator mesin secara manual telah menyesuaikan bahwa ID barang di database sama dengan letak motor fisik mesin.
+    Berisi *array* dari Lokasi Rak/Slot (`location_id`) yang sedang aktif. Karena yang dikirim adalah angka Laci Fisiknya, ESP32 bisa langsung mencocokkannya dengan motor tanpa peduli berapapun ID di database.
     ```json
     {
-      "active_indexes": [1, 2, 3, 5]
+      "active_indexes": [1, 2, 3, 5, 6, 7]
     }
     ```
 
@@ -67,10 +67,10 @@ Saat pelanggan selesai membayar via Midtrans, Web akan mem-publish perintah ke m
 *   **Topic**: `vending/{machineId}/cmd` *(Contoh: `vending/VM001/cmd` untuk Gate 1)*
 *   **Arah**: Web (Backend) 👉 ESP32
 *   **Payload JSON**:
-    Berisi *array* dari ID Barang di Database (`item_id`) yang dibeli. Karena `item_id` sudah disamakan dengan index motor fisik oleh operator, ESP32 bisa langsung memutar motor sesuai angka ini.
+    Berisi *array* dari Nomor Laci/Motor (`location_id`) yang barangnya dibeli. ESP32 bisa langsung memutar motor sesuai angka ini.
     ```json
     {
-      "items": [101, 101, 105]
+      "items": [6, 6, 7]
     }
     ```
 

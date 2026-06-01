@@ -11,11 +11,12 @@ MQTT_KEEPALIVE = 60
 
 logger = logging.getLogger(__name__)
 
+# Simpan referensi ke main event loop dari FastAPI
+main_loop = None
+
 import uuid
 
-#client = mqtt.Client(client_id="venmachine_backend_api", clean_session=True)
-
-# Initialize MQTT Client dengan ID unik agar tidak bentrok antara localhost dan Back4App
+# Initialize MQTT Client dengan ID unik agar tidak bentrok antara localhost dan server Render
 client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
 client = mqtt.Client(client_id=client_id, clean_session=True)
 
@@ -66,11 +67,12 @@ async def _fetch_and_publish_config():
         
     async with pool.acquire() as connection:
         try:
-            # Ambil semua id barang (yang bertindak sebagai index fisik bagi ESP32)
-            rows = await connection.fetch("SELECT id FROM items WHERE machine_stock > 0 OR warehouse_stock > 0")
+            # Ambil semua id barang (yang bertindak sebagai index fisik bagi ESP32) secara berurutan
+            # Ambil semua location_id rak (yang bertindak sebagai index fisik bagi ESP32) secara berurutan
+            rows = await connection.fetch("SELECT DISTINCT location_id FROM items WHERE (machine_stock > 0 OR warehouse_stock > 0) AND location_id IS NOT NULL ORDER BY location_id ASC")
             
-            # Buat list active_indexes murni dari ID barang
-            active_indexes = [row['id'] for row in rows]
+            # Buat list active_indexes murni dari lokasi rak
+            active_indexes = [row['location_id'] for row in rows]
             
             topic = "vending/config"
             payload = {
@@ -99,14 +101,20 @@ def on_message(client, userdata, msg):
             data = json.loads(payload_str)
             item_id = data.get('item')
             if item_id is not None:
-                # Karena on_message berjalan di thread Paho MQTT, kita gunakan asyncio.run untuk async DB call
-                asyncio.run(_log_dispense(machine_id, item_id))
+                # Gunakan run_coroutine_threadsafe karena dipanggil dari thread MQTT
+                if main_loop:
+                    asyncio.run_coroutine_threadsafe(_log_dispense(machine_id, item_id), main_loop)
+                else:
+                    logger.error("Main loop belum diinisialisasi")
         elif topic == 'vending/request_config':
             try:
                 data = json.loads(payload_str)
                 if data.get('msg') == 'REQUEST_DATA_BARANG':
                     logger.info(f"ESP32 meminta konfigurasi index terbaru...")
-                    asyncio.run(_fetch_and_publish_config())
+                    if main_loop:
+                        asyncio.run_coroutine_threadsafe(_fetch_and_publish_config(), main_loop)
+                    else:
+                        logger.error("Main loop belum diinisialisasi")
             except json.JSONDecodeError:
                 logger.warning("Pesan request_config bukan JSON yang valid.")
     except Exception as e:
@@ -114,8 +122,11 @@ def on_message(client, userdata, msg):
 
 client.on_message = on_message
 
-def start_mqtt():
+def start_mqtt(loop=None):
     """Memulai MQTT client loop di background"""
+    global main_loop
+    main_loop = loop or asyncio.get_running_loop()
+    
     try:
         client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
         client.loop_start()

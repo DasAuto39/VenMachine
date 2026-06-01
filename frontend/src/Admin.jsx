@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { 
-  BarChart, 
-  Package, 
-  Settings, 
-  LogOut, 
-  Edit, 
-  Trash2, 
-  Plus, 
+import {
+  BarChart,
+  Package,
+  Settings,
+  LogOut,
+  Edit,
+  Trash2,
+  Plus,
   Image as ImageIcon,
   CheckCircle2,
   XCircle,
@@ -31,7 +31,8 @@ function Admin() {
     price: '',
     machine_stock: '',
     warehouse_stock: '',
-    location_id: ''
+    location_id: '',
+    description: ''
   });
 
   // Expandable transaction details state
@@ -55,7 +56,7 @@ function Admin() {
     // Role verification
     const storedUser = localStorage.getItem('user');
     const authenticated = localStorage.getItem('authenticated');
-    
+
     if (!storedUser || authenticated !== 'true') {
       navigate('/login');
       return;
@@ -77,7 +78,7 @@ function Admin() {
     fetchItems();
     fetchTransactions();
     fetchPosts();
-    
+
     // Refresh transactions every 10 seconds
     const interval = setInterval(fetchTransactions, 10000);
     return () => clearInterval(interval);
@@ -143,7 +144,7 @@ function Admin() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     if (!formData.name || !formData.sku || !formData.price || formData.machine_stock === '' || formData.warehouse_stock === '' || !formData.location_id) {
       alert("Semua field harus diisi!");
       return;
@@ -172,8 +173,8 @@ function Admin() {
           alert("Produk berhasil ditambahkan!");
         }
       }
-      
-      setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '' });
+
+      setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '', description: '' });
       setShowForm(false);
       fetchItems();
     } catch (err) {
@@ -190,7 +191,8 @@ function Admin() {
       price: item.price,
       machine_stock: item.machine_stock,
       warehouse_stock: item.warehouse_stock,
-      location_id: item.location_id
+      location_id: item.location_id,
+      description: item.description || ''
     });
     setEditingId(item.id);
     setShowForm(true);
@@ -215,7 +217,7 @@ function Admin() {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
-    setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '' });
+    setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '', description: '' });
   };
 
   const handlePostInputChange = (e) => {
@@ -240,19 +242,19 @@ function Admin() {
         item_id: postFormData.item_id ? parseInt(postFormData.item_id) : null,
         is_published: postFormData.is_published
       };
-      
-      const url = editingPostId 
+
+      const url = editingPostId
         ? `${import.meta.env.VITE_API_BASE_URL}/api/admin/posts/${editingPostId}`
         : `${import.meta.env.VITE_API_BASE_URL}/api/admin/posts`;
-      
+
       const method = editingPostId ? 'PUT' : 'POST';
-      
+
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: JSON.stringify(payload)
       });
-      
+
       if (res.ok) {
         alert(`Post berhasil ${editingPostId ? 'diperbarui' : 'ditambahkan'}!`);
         handlePostCancel();
@@ -313,7 +315,7 @@ function Admin() {
             <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
           </div>
           <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
-            <button 
+            <button
               onClick={() => navigate('/user')}
               className="px-3 md:px-5 py-2 md:py-2.5 bg-white border-2 border-indigo-100 text-indigo-600 rounded-full font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-300 flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5 whitespace-nowrap"
             >
@@ -332,36 +334,33 @@ function Admin() {
             </button>
           </div>
         </div>
-        
+
         {/* Tabs */}
         <div className="flex gap-3 max-w-7xl mx-auto overflow-x-auto pb-1 hide-scrollbar">
           <button
             onClick={() => setActiveTab('products')}
-            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
-              activeTab === 'products'
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'products'
                 ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30 transform -translate-y-0.5'
                 : 'bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200'
-            }`}
+              }`}
           >
             <Package className="w-4 h-4" /> Manajemen Produk
           </button>
           <button
             onClick={() => setActiveTab('transactions')}
-            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
-              activeTab === 'transactions'
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'transactions'
                 ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/30 transform -translate-y-0.5'
                 : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 hover:border-blue-200'
-            }`}
+              }`}
           >
             <Clock className="w-4 h-4" /> Riwayat Pembayaran ({transactions.length})
           </button>
           <button
             onClick={() => setActiveTab('posts')}
-            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${
-              activeTab === 'posts'
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'posts'
                 ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transform -translate-y-0.5'
                 : 'bg-white text-slate-500 hover:bg-fuchsia-50 hover:text-fuchsia-600 border border-slate-200 hover:border-fuchsia-200'
-            }`}
+              }`}
           >
             <ImageIcon className="w-4 h-4" /> Manajemen Informasi ({posts.length})
           </button>
@@ -369,239 +368,251 @@ function Admin() {
       </header>
 
       <main className="max-w-7xl mx-auto px-6 py-8">
-        
+
         {/* PRODUCTS TAB */}
         {activeTab === 'products' && (
           <>
-        
-        {/* Add Button */}
-        <button
-          onClick={() => {
-            setShowForm(true);
-            setEditingId(null);
-          }}
-          className="mb-8 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/40 transition-all duration-300 flex items-center gap-2 transform hover:-translate-y-1"
-        >
-          <Plus className="w-5 h-5" /> Tambah Produk Baru
-        </button>
 
-        {/* Form Modal */}
-        {showForm && (
-          <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
-            <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-8 max-w-md w-full shadow-2xl transform transition-all">
-              <h2 className="text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
-                {editingId ? ' Edit Produk' : ' Tambah Produk Baru'}
-              </h2>
+            {/* Add Button */}
+            <button
+              onClick={() => {
+                setShowForm(true);
+                setEditingId(null);
+              }}
+              className="mb-8 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/40 transition-all duration-300 flex items-center gap-2 transform hover:-translate-y-1"
+            >
+              <Plus className="w-5 h-5" /> Tambah Produk Baru
+            </button>
 
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Nama Produk</label>
-                  <input
-                    type="text"
-                    name="name"
-                    value={formData.name}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="Contoh: Bayam Segar"
-                  />
-                </div>
+            {/* Form Modal */}
+            {showForm && (
+              <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
+                <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-8 max-w-md w-full shadow-2xl transform transition-all">
+                  <h2 className="text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
+                    {editingId ? ' Edit Produk' : ' Tambah Produk Baru'}
+                  </h2>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-1">SKU</label>
-                  <input
-                    type="text"
-                    name="sku"
-                    value={formData.sku}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="Contoh: SKU001"
-                  />
-                </div>
+                  <form onSubmit={handleSubmit} className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Nama Produk</label>
+                      <input
+                        type="text"
+                        name="name"
+                        value={formData.name}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                        placeholder="Contoh: Bayam Segar"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Kategori</label>
-                  <select
-                    name="category"
-                    value={formData.category}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                  >
-                    <option value="Sayuran">Sayuran</option>
-                    <option value="Buah">Buah</option>
-                    <option value="Bahan Pokok">Bahan Pokok</option>
-                    <option value="Minuman">Minuman</option>
-                    <option value="Snack">Snack</option>
-                    <option value="Daging">Daging</option>
-                    <option value="Lainnya">Lainnya</option>
-                  </select>
-                </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">SKU</label>
+                      <input
+                        type="text"
+                        name="sku"
+                        value={formData.sku}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                        placeholder="Contoh: SKU001"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Harga (Rp)</label>
-                  <input
-                    type="number"
-                    name="price"
-                    value={formData.price}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="15000"
-                  />
-                </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Kategori</label>
+                      <select
+                        name="category"
+                        value={formData.category}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                      >
+                        <option value="Sayuran">Sayuran</option>
+                        <option value="Buah">Buah</option>
+                        <option value="Bahan Pokok">Bahan Pokok</option>
+                        <option value="Minuman">Minuman</option>
+                        <option value="Snack">Snack</option>
+                        <option value="Daging">Daging</option>
+                        <option value="Lainnya">Lainnya</option>
+                      </select>
+                    </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">Stok Mesin (Maks 10)</label>
-                    <input
-                      type="number"
-                      name="machine_stock"
-                      value={formData.machine_stock}
-                      onChange={handleInputChange}
-                      min="0"
-                      max="10"
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="10"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold mb-1">Stok Gudang</label>
-                    <input
-                      type="number"
-                      name="warehouse_stock"
-                      value={formData.warehouse_stock}
-                      onChange={handleInputChange}
-                      min="0"
-                      className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                      placeholder="40"
-                    />
-                  </div>
-                </div>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Harga (Rp)</label>
+                      <input
+                        type="number"
+                        name="price"
+                        value={formData.price}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                        placeholder="15000"
+                      />
+                    </div>
 
-                <div>
-                  <label className="block text-sm font-semibold mb-1">Lokasi (Rak)</label>
-                  <input
-                    type="number"
-                    name="location_id"
-                    value={formData.location_id}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="1"
-                  />
-                </div>
-
-                <div className="flex gap-3 pt-6">
-                  <button
-                    type="submit"
-                    className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 transition-all duration-300"
-                  >
-                    {editingId ? 'Simpan Perubahan' : 'Tambahkan'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleCancel}
-                    className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors"
-                  >
-                    Batal
-                  </button>
-                </div>
-              </form>
-            </div>
-          </div>
-        )}
-
-        {/* Products Table */}
-        <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="bg-slate-50/50 border-b border-slate-100">
-                  <th className="px-6 py-4 text-left font-bold text-slate-700">ID</th>
-                  <th className="px-6 py-4 text-left font-bold text-slate-700">Nama Produk</th>
-                  <th className="px-6 py-4 text-left font-bold text-slate-700">SKU</th>
-                  <th className="px-6 py-4 text-left font-bold text-slate-700">Kategori</th>
-                  <th className="px-6 py-4 text-right font-bold text-slate-700">Harga</th>
-                  <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Mesin</th>
-                  <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Gudang</th>
-                  <th className="px-6 py-4 text-center font-bold text-slate-700">Rak</th>
-                  <th className="px-6 py-4 text-center font-bold text-slate-700">Aksi</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => (
-                  <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                    <td className="px-6 py-4 text-slate-700 font-semibold">{item.id}</td>
-                    <td className="px-6 py-4 text-slate-700 font-semibold">{item.name}</td>
-                    <td className="px-6 py-4 text-slate-600 font-mono">{item.sku}</td>
-                    <td className="px-6 py-4">
-                      <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">{item.category || 'Lainnya'}</span>
-                    </td>
-                    <td className="px-6 py-4 text-right text-emerald-600 font-bold">
-                      Rp {(item.price || 0).toLocaleString('id-ID')}
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold">
-                      <span className={`px-2 py-1 rounded-lg ${item.machine_stock <= 2 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                        {String(item.machine_stock || 0)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right font-bold text-slate-700">
-                      {String(item.warehouse_stock || 0)}
-                    </td>
-                    <td className="px-6 py-4 text-center text-slate-600 font-semibold">
-                      {item.location_code || '-'}
-                    </td>
-                    <td className="px-6 py-4 text-center">
-                      <div className="flex justify-center gap-2">
-                        <button
-                          onClick={() => handleEdit(item)}
-                          className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
-                          title="Edit"
-                        >
-                          <Edit className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(item.id)}
-                          className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-semibold mb-1">Stok Mesin (Maks 10)</label>
+                        <input
+                          type="number"
+                          name="machine_stock"
+                          value={formData.machine_stock}
+                          onChange={handleInputChange}
+                          min="0"
+                          max="10"
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                          placeholder="10"
+                        />
                       </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      <div>
+                        <label className="block text-sm font-semibold mb-1">Stok Gudang</label>
+                        <input
+                          type="number"
+                          name="warehouse_stock"
+                          value={formData.warehouse_stock}
+                          onChange={handleInputChange}
+                          min="0"
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                          placeholder="40"
+                        />
+                      </div>
+                    </div>
 
-          {items.length === 0 && (
-            <div className="text-center py-12 text-slate-500">
-              <p className="text-lg font-semibold">Belum ada produk</p>
-              <p className="text-sm">Klik "Tambah Produk Baru" untuk memulai</p>
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Lokasi (Rak)</label>
+                      <input
+                        type="number"
+                        name="location_id"
+                        value={formData.location_id}
+                        onChange={handleInputChange}
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                        placeholder="1"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Deskripsi Produk (Opsional)</label>
+                      <textarea
+                        name="description"
+                        value={formData.description}
+                        onChange={handleInputChange}
+                        rows="2"
+                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none resize-none"
+                        placeholder="Tambahkan deskripsi singkat mengenai produk..."
+                      ></textarea>
+                    </div>
+
+                    <div className="flex gap-3 pt-6">
+                      <button
+                        type="submit"
+                        className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 transition-all duration-300"
+                      >
+                        {editingId ? 'Simpan Perubahan' : 'Tambahkan'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCancel}
+                        className="flex-1 bg-slate-100 text-slate-600 py-3 rounded-full font-bold hover:bg-slate-200 transition-colors"
+                      >
+                        Batal
+                      </button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+
+            {/* Products Table */}
+            <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-slate-100 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Lokasi Motor</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Nama Produk</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">SKU</th>
+                      <th className="px-6 py-4 text-left font-bold text-slate-700">Kategori</th>
+                      <th className="px-6 py-4 text-right font-bold text-slate-700">Harga</th>
+                      <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Mesin</th>
+                      <th className="px-6 py-4 text-right font-bold text-slate-700">Stok Gudang</th>
+                      <th className="px-6 py-4 text-center font-bold text-slate-700">Rak</th>
+                      <th className="px-6 py-4 text-center font-bold text-slate-700">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {items.map((item) => (
+                      <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
+                        <td className="px-6 py-4 text-slate-700 font-semibold">{item.location_id || '-'}</td>
+                        <td className="px-6 py-4 text-slate-700 font-semibold">{item.name}</td>
+                        <td className="px-6 py-4 text-slate-600 font-mono">{item.sku}</td>
+                        <td className="px-6 py-4">
+                          <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">{item.category || 'Lainnya'}</span>
+                        </td>
+                        <td className="px-6 py-4 text-right text-emerald-600 font-bold">
+                          Rp {(item.price || 0).toLocaleString('id-ID')}
+                        </td>
+                        <td className="px-6 py-4 text-right font-bold">
+                          <span className={`px-2 py-1 rounded-lg ${item.machine_stock <= 2 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                            {String(item.machine_stock || 0)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right font-bold text-slate-700">
+                          {String(item.warehouse_stock || 0)}
+                        </td>
+                        <td className="px-6 py-4 text-center text-slate-600 font-semibold">
+                          {item.location_code || '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex justify-center gap-2">
+                            <button
+                              onClick={() => handleEdit(item)}
+                              className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
+                              title="Edit"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                              title="Hapus"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {items.length === 0 && (
+                <div className="text-center py-12 text-slate-500">
+                  <p className="text-lg font-semibold">Belum ada produk</p>
+                  <p className="text-sm">Klik "Tambah Produk Baru" untuk memulai</p>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* Summary */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(99,102,241,0.1)] transition-all">
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
-            <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Produk</p>
-            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 relative z-10">{items.length}</p>
-          </div>
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] transition-all">
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
-            <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Stok</p>
-            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500 relative z-10">
-              {items.reduce((sum, item) => sum + (item.machine_stock || 0) + (item.warehouse_stock || 0), 0)}
-            </p>
-          </div>
-          <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(244,63,94,0.1)] transition-all">
-            <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-rose-100 to-pink-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
-            <p className="text-slate-500 font-semibold mb-2 relative z-10">Produk Habis</p>
-            <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-rose-500 to-pink-500 relative z-10">
-              {items.filter(item => (item.machine_stock || 0) === 0 && (item.warehouse_stock || 0) === 0).length}
-            </p>
-          </div>
-        </div>
+            {/* Summary */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(99,102,241,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-indigo-100 to-purple-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Produk</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600 relative z-10">{items.length}</p>
+              </div>
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-emerald-100 to-teal-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Stok</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-emerald-500 to-teal-500 relative z-10">
+                  {items.reduce((sum, item) => sum + (item.machine_stock || 0) + (item.warehouse_stock || 0), 0)}
+                </p>
+              </div>
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(244,63,94,0.1)] transition-all">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-rose-100 to-pink-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <p className="text-slate-500 font-semibold mb-2 relative z-10">Produk Habis</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-rose-500 to-pink-500 relative z-10">
+                  {items.filter(item => (item.machine_stock || 0) === 0 && (item.warehouse_stock || 0) === 0).length}
+                </p>
+              </div>
+            </div>
           </>
         )}
 
@@ -609,7 +620,7 @@ function Admin() {
         {activeTab === 'transactions' && (
           <div>
             <h2 className="text-2xl font-black text-slate-900 mb-6">Riwayat Pembayaran</h2>
-            
+
             {transactions.length === 0 ? (
               <div className="bg-white rounded-3xl shadow-[0_8px_30px_rgb(0,0,0,0.04)] p-12 text-center border border-slate-100">
                 <p className="text-slate-500 text-lg font-medium">Belum ada transaksi</p>
@@ -632,7 +643,7 @@ function Admin() {
                     <tbody>
                       {transactions.map((tx) => (
                         <React.Fragment key={tx.transaction_id}>
-                          <tr 
+                          <tr
                             className="border-b border-slate-200 hover:bg-slate-50 transition-colors cursor-pointer"
                             onClick={() => toggleTransactionDetail(tx.transaction_id)}
                           >
@@ -648,18 +659,17 @@ function Admin() {
                               {tx.payment_method || '-'}
                             </td>
                             <td className="px-6 py-4">
-                              <span className={`px-3 py-1 rounded-full text-sm font-bold ${
-                                tx.payment_status === 'PAID' 
+                              <span className={`px-3 py-1 rounded-full text-sm font-bold ${tx.payment_status === 'PAID'
                                   ? 'bg-emerald-100 text-emerald-700'
                                   : tx.payment_status === 'PENDING'
-                                  ? 'bg-yellow-100 text-yellow-700'
-                                  : 'bg-red-100 text-red-700'
-                              }`}>
-                              <div className="flex items-center gap-1.5 justify-center">
-                                {tx.payment_status === 'PAID' ? <><CheckCircle2 size={14} /> Dibayar</> : 
-                                 tx.payment_status === 'PENDING' ? <><Clock size={14} /> Menunggu</> : 
-                                 <><XCircle size={14} /> Dibatalkan</>}
-                              </div>
+                                    ? 'bg-yellow-100 text-yellow-700'
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                <div className="flex items-center gap-1.5 justify-center">
+                                  {tx.payment_status === 'PAID' ? <><CheckCircle2 size={14} /> Dibayar</> :
+                                    tx.payment_status === 'PENDING' ? <><Clock size={14} /> Menunggu</> :
+                                      <><XCircle size={14} /> Dibatalkan</>}
+                                </div>
                               </span>
                             </td>
                             <td className="px-6 py-4 text-slate-600 text-sm">
@@ -865,9 +875,8 @@ function Admin() {
                           <td className="px-6 py-4 text-slate-700 font-semibold">{post.id}</td>
                           <td className="px-6 py-4 text-slate-700 font-semibold max-w-xs truncate" title={post.title}>{post.title}</td>
                           <td className="px-6 py-4">
-                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              post.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
-                            }`}>
+                            <span className={`px-3 py-1 rounded-full text-xs font-bold ${post.is_published ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-700'
+                              }`}>
                               {post.is_published ? 'PUBLISHED' : 'DRAFT'}
                             </span>
                           </td>

@@ -245,35 +245,35 @@ function App({ onGoToAdmin, onGoToLogin }) {
       setIsProcessing(true);
       setIsPaymentModalOpen(true);
       setPaymentStatus(null);
-      
+
       fetch(`${import.meta.env.VITE_API_BASE_URL}/api/payment/callback`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ order_id, transaction_status })
       })
-      .then(res => res.json())
-      .then(data => {
-        if (data.status === 'SUCCESS') {
-          setPaymentStatus('success');
-          showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.', 'success');
-          setTimeout(async () => {
-            setCart({});
-            setIsPaymentModalOpen(false);
-            setPaymentStatus(null);
+        .then(res => res.json())
+        .then(data => {
+          if (data.status === 'SUCCESS') {
+            setPaymentStatus('success');
+            showNotification(' Pembayaran berhasil! Barang Anda Akan Segera Keluar.', 'success');
+            setTimeout(async () => {
+              setCart({});
+              setIsPaymentModalOpen(false);
+              setPaymentStatus(null);
+              setIsProcessing(false);
+              fetchItems();
+            }, 3000);
+          } else {
+            setPaymentStatus('failed');
+            showNotification('Gagal memverifikasi pembayaran dengan mesin!', 'error');
             setIsProcessing(false);
-            fetchItems();
-          }, 3000);
-        } else {
+          }
+        })
+        .catch(err => {
           setPaymentStatus('failed');
-          showNotification('Gagal memverifikasi pembayaran dengan mesin!', 'error');
+          showNotification(` Error konfirmasi: ${err.message}`, 'error');
           setIsProcessing(false);
-        }
-      })
-      .catch(err => {
-        setPaymentStatus('failed');
-        showNotification(` Error konfirmasi: ${err.message}`, 'error');
-        setIsProcessing(false);
-      });
+        });
     }
   }, []);
 

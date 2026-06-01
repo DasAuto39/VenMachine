@@ -7,7 +7,7 @@ import json
 import os
 from database import DatabasePool
 from auth import get_current_user, get_admin_user
-from mqtt_client import start_mqtt, stop_mqtt, publish_dispense
+from mqtt_client import start_mqtt, stop_mqtt, publish_dispense, publish_active_config_async
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -118,7 +118,9 @@ class ItemUpdate(BaseModel):
 @app.on_event("startup")
 async def startup():
     await DatabasePool.init()
-    start_mqtt()
+    import asyncio
+    loop = asyncio.get_running_loop()
+    start_mqtt(loop)
 
 @app.on_event("shutdown")
 async def shutdown():
@@ -395,7 +397,7 @@ async def payment_callback_endpoint(req: PaymentCallbackRequest):
                 if dispensed_items:
                     items_to_dispense = []
                     for item in dispensed_items:
-                        items_to_dispense.extend([item['item_id']] * item['quantity'])
+                        items_to_dispense.extend([item['location_id']] * item['quantity'])
                     publish_dispense(transaction['gate_id'], items_to_dispense)
             return result
         else:

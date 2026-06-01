@@ -443,6 +443,17 @@ async def create_item(name: str, sku: str, price: float, machine_stock: int, war
     
     async with pool.acquire() as connection:
         try:
+            # Jika admin memasukkan location_id, buatkan secara dinamis
+            if location_id is not None:
+                await connection.execute(
+                    """
+                    INSERT INTO storage_locations (id, row_position, location_code)
+                    VALUES ($1, $1, $2)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    location_id, f"ROW{location_id}"
+                )
+                
             result = await connection.fetchrow(
                 """
                 INSERT INTO items (name, sku, category, price, machine_stock, warehouse_stock, location_id, description, image_url)
@@ -504,6 +515,18 @@ async def update_item(item_id: int, **kwargs) -> Dict:
     
     async with pool.acquire() as connection:
         try:
+            # Jika admin memasukkan location_id baru, buatkan secara dinamis
+            if 'location_id' in updates and updates['location_id'] is not None:
+                loc_id = updates['location_id']
+                await connection.execute(
+                    """
+                    INSERT INTO storage_locations (id, row_position, location_code)
+                    VALUES ($1, $1, $2)
+                    ON CONFLICT (id) DO NOTHING
+                    """,
+                    loc_id, f"ROW{loc_id}"
+                )
+                
             query = f"""
                 UPDATE items
                 SET {', '.join(set_clauses)}
