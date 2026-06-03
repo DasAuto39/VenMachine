@@ -5,7 +5,7 @@ import paho.mqtt.client as mqtt
 from database import DatabasePool
 
 # Konfigurasi MQTT
-MQTT_BROKER = "broker.hivemq.com"
+MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 MQTT_KEEPALIVE = 60
 

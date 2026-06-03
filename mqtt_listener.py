@@ -2,7 +2,7 @@ import paho.mqtt.client as mqtt
 import json
 
 # Konfigurasi Broker (Harus sama dengan backend)
-MQTT_BROKER = "broker.hivemq.com"
+MQTT_BROKER = "broker.emqx.io"
 MQTT_PORT = 1883
 TOPIC = "vending/+/cmd"
 
