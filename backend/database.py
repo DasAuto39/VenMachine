@@ -21,7 +21,13 @@ class DatabasePool:
         """Initialize database pool pada startup"""
         if cls._pool is None:
             # statement_cache_size=0 diperlukan agar asyncpg tidak crash saat menggunakan Supabase IPv4 Pooler (Transaction Mode)
-            cls._pool = await asyncpg.create_pool(DB_URL, statement_cache_size=0)
+            cls._pool = await asyncpg.create_pool(
+                DB_URL, 
+                statement_cache_size=0,
+                min_size=1,
+                max_size=5,
+                max_inactive_connection_lifetime=300
+            )
         return cls._pool
     
     @classmethod
