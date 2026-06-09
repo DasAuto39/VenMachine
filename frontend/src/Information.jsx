@@ -50,50 +50,49 @@ function Information() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-4 flex items-center justify-between transition-all">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black">
-              F
-            </div>
-            <div>
-              <span className="text-xl font-black tracking-tight text-slate-900">
+        <header className="fixed top-0 left-0 right-0 z-40 w-full" style={{minHeight: '62px'}}>
+          <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500" />
+          <div className="w-full h-full backdrop-blur-xl bg-emerald-50/95 border-b border-emerald-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{minHeight: '62px'}}>
+            <div className="flex items-center gap-2.5 shrink-0">
+              <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-emerald-500/25 text-white text-sm font-black">
+                F
+              </div>
+              <span className="text-base font-black tracking-tight text-slate-900 hidden sm:block">
                 FRESH<span className="text-emerald-500">MART</span>
               </span>
             </div>
-          </div>
 
-          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
-            {user && (
-              <button
-                onClick={() => navigate('/profile')}
-                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-              >
-                <span className="text-base">👤 <span className="hidden md:inline">{user?.full_name || user?.username}</span></span>
-              </button>
-            )}
-            <button
-              onClick={() => {
-                const savedGate = localStorage.getItem('current_gate');
-                navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
-              }}
-              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-            >
-              <ArrowLeft size={18} />
-              <span className="hidden md:inline text-base">Kembali Belanja</span>
-            </button>
-            {localStorage.getItem('authenticated') === 'true' && (
+            <div className="flex items-center gap-1.5">
+              {user && (
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-teal-700 border border-teal-200 hover:bg-teal-50 hover:border-teal-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+                >
+                  {user?.full_name?.split(' ')[0] || user?.username}
+                </button>
+              )}
               <button
                 onClick={() => {
-                  localStorage.removeItem('user');
-                  localStorage.removeItem('authenticated');
-                  navigate('/user');
+                  const savedGate = localStorage.getItem('current_gate');
+                  navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
                 }}
-                className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+                className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
               >
-                <LogOut size={18} />
-                <span className="hidden md:inline text-base">Logout</span>
+                Kembali Belanja
               </button>
-            )}
+              {localStorage.getItem('authenticated') === 'true' && (
+                <button
+                  onClick={() => {
+                    localStorage.removeItem('user');
+                    localStorage.removeItem('authenticated');
+                    navigate('/user');
+                  }}
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all whitespace-nowrap"
+                >
+                  Keluar
+                </button>
+              )}
+            </div>
           </div>
         </header>
 

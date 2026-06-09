@@ -90,8 +90,10 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
     pool = DatabasePool.get_pool()
     
     # Validate payment method
-    valid_methods = ['CASH', 'QRIS', 'TRANSFER', 'CARD', 'MIDTRANS']
-    if payment_method not in valid_methods:
+    valid_methods = ['CASH', 'QRIS', 'TRANSFER', 'CARD']
+    is_midtrans = payment_method.startswith('MIDTRANS')
+    
+    if not is_midtrans and payment_method not in valid_methods:
         raise HTTPException(status_code=400, detail=f"Invalid payment method. Choose from: {', '.join(valid_methods)}")
     
     async with pool.acquire() as connection:
@@ -116,11 +118,17 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                     )
                     raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
                 
-                # DEMO: Simulate successful payment (90% success rate), but MIDTRANS always success if reached here
-                if payment_method == 'MIDTRANS':
+                # Setup status and display method
+                if is_midtrans:
                     is_success = True
+                    # Format: MIDTRANS_BANK_TRANSFER -> Bank Transfer (Midtrans)
+                    display_method = payment_method.replace("MIDTRANS_", "").replace("_", " ").title()
+                    if display_method == "Midtrans": 
+                        display_method = "Online Payment"
+                    final_payment_method = f"{display_method} (Midtrans)"
                 else:
                     is_success = random.random() < 0.9
+                    final_payment_method = payment_method
                 
                 payment_code = f"PAY-{datetime.utcnow().strftime('%Y%m%d%H%M%S')}-{random.randint(1000, 9999)}"
                 payment_status = 'SUCCESS' if is_success else 'FAILED'
@@ -132,7 +140,7 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                     VALUES ($1, $2, $3, $4, $5)
                     RETURNING id, payment_code, status
                     """,
-                    transaction_id, payment_method, payment_code, payment_status, 
+                    transaction_id, final_payment_method, payment_code, payment_status, 
                     datetime.utcnow() if is_success else None
                 )
                 

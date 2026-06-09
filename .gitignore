@@ -29,7 +29,10 @@ MANIFEST
 # Project
 .env
 frontend/node_modules/
-backend/__pycache__/
+backend/__pycache__
+backend/uploads/*
+to_dolits.txt
+!backend/uploads/.gitkeep
 backend/init_db.py
 backend/db.sql
 IMAGE_SETUP_GUIDE.md

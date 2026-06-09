@@ -38,6 +38,11 @@ function Admin() {
   // Expandable transaction details state
   const [expandedTx, setExpandedTx] = useState(null);
   const [txItems, setTxItems] = useState({});
+  const [originalItem, setOriginalItem] = useState(null); // stok asli sebelum diedit
+
+  // Image Upload state
+  const [imageFile, setImageFile] = useState(null);
+  const [imagePreview, setImagePreview] = useState(null);
 
   // Posts state
   const [posts, setPosts] = useState([]);
@@ -50,6 +55,8 @@ function Admin() {
     item_id: '',
     is_published: true
   });
+  const [postImageFile, setPostImageFile] = useState(null);
+  const [postImagePreview, setPostImagePreview] = useState(null);
 
   // Fetch all items and transactions
   useEffect(() => {
@@ -150,24 +157,80 @@ function Admin() {
       return;
     }
 
+    // === Logika transfer stok gudang → mesin (hanya saat edit) ===
+    let finalFormData = { ...formData };
+    if (editingId && originalItem) {
+      const newMachineStock = Number(formData.machine_stock);
+      const oldMachineStock = Number(originalItem.machine_stock);
+      const currentWarehouse = Number(formData.warehouse_stock);
+
+      if (newMachineStock > oldMachineStock) {
+        // Admin menambah stok mesin → kurangi dari gudang
+        const tambahan = newMachineStock - oldMachineStock;
+        if (currentWarehouse < tambahan) {
+          alert(
+            `Stok gudang tidak cukup!\n\n` +
+            `Anda ingin menambah ${tambahan} ke mesin, tetapi stok gudang hanya ${currentWarehouse}.\n` +
+            `Silakan tambah stok gudang terlebih dahulu.`
+          );
+          return;
+        }
+        // Kurangi gudang sebesar tambahan mesin
+        finalFormData = {
+          ...formData,
+          machine_stock: newMachineStock,
+          warehouse_stock: currentWarehouse - tambahan
+        };
+      }
+      // Jika machine_stock dikurangi, stok gudang tidak berubah (barang sudah di mesin)
+    }
+    // =============================================================
+
+    // === Logika upload gambar ===
+    if (imageFile) {
+      const formDataUpload = new FormData();
+      formDataUpload.append('file', imageFile);
+
+      try {
+        const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+          body: formDataUpload
+        });
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          finalFormData.image_url = `${import.meta.env.VITE_API_BASE_URL}${uploadData.url}`;
+        } else {
+          alert("Gagal mengupload gambar!");
+          return;
+        }
+      } catch (err) {
+        console.error("Error upload:", err);
+        alert("Terjadi kesalahan saat upload gambar!");
+        return;
+      }
+    }
+    // =============================================================
+
     try {
       if (editingId) {
         // Update
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${editingId}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(finalFormData)
         });
         if (res.ok) {
           alert("Produk berhasil diperbarui!");
           setEditingId(null);
+          setOriginalItem(null);
         }
       } else {
-        // Create
+        // Create — stok langsung dipakai apa adanya
         const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${localStorage.getItem('token')}` },
-          body: JSON.stringify(formData)
+          body: JSON.stringify(finalFormData)
         });
         if (res.ok) {
           alert("Produk berhasil ditambahkan!");
@@ -175,6 +238,8 @@ function Admin() {
       }
 
       setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '', description: '' });
+      setImageFile(null);
+      setImagePreview(null);
       setShowForm(false);
       fetchItems();
     } catch (err) {
@@ -184,6 +249,7 @@ function Admin() {
   };
 
   const handleEdit = (item) => {
+    setOriginalItem(item); // simpan data asli untuk kalkulasi selisih stok
     setFormData({
       name: item.name,
       sku: item.sku,
@@ -194,6 +260,8 @@ function Admin() {
       location_id: item.location_id,
       description: item.description || ''
     });
+    setImageFile(null);
+    setImagePreview(item.image_url || null);
     setEditingId(item.id);
     setShowForm(true);
   };
@@ -217,6 +285,9 @@ function Admin() {
   const handleCancel = () => {
     setShowForm(false);
     setEditingId(null);
+    setOriginalItem(null);
+    setImageFile(null);
+    setImagePreview(null);
     setFormData({ name: '', sku: '', category: 'Lainnya', price: '', machine_stock: '', warehouse_stock: '', location_id: '', description: '' });
   };
 
@@ -235,10 +306,33 @@ function Admin() {
       return;
     }
     try {
+      let finalImageUrl = postFormData.image_url || null;
+      
+      // === Logika upload gambar post ===
+      if (postImageFile) {
+        const formDataUpload = new FormData();
+        formDataUpload.append('file', postImageFile);
+
+        const uploadRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/upload`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+          body: formDataUpload
+        });
+        
+        if (uploadRes.ok) {
+          const uploadData = await uploadRes.json();
+          finalImageUrl = `${import.meta.env.VITE_API_BASE_URL}${uploadData.url}`;
+        } else {
+          alert("Gagal mengupload gambar post!");
+          return;
+        }
+      }
+      // =================================
+
       const payload = {
         title: postFormData.title,
         content: postFormData.content,
-        image_url: postFormData.image_url || null,
+        image_url: finalImageUrl,
         item_id: postFormData.item_id ? parseInt(postFormData.item_id) : null,
         is_published: postFormData.is_published
       };
@@ -277,6 +371,8 @@ function Admin() {
       item_id: post.item_id || '',
       is_published: post.is_published
     });
+    setPostImageFile(null);
+    setPostImagePreview(post.image_url || null);
     setEditingPostId(post.id);
     setShowPostForm(true);
   };
@@ -301,25 +397,30 @@ function Admin() {
     setShowPostForm(false);
     setEditingPostId(null);
     setPostFormData({ title: '', content: '', image_url: '', item_id: '', is_published: true });
+    setPostImageFile(null);
+    setPostImagePreview(null);
   };
 
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
-      <header className="sticky top-0 z-40 bg-white/80 backdrop-blur-xl border-b border-indigo-50 px-6 py-5 shadow-sm">
-        <div className="max-w-7xl mx-auto flex justify-between items-center mb-6">
+      <header className="sticky top-0 z-40 w-full bg-indigo-50/95 backdrop-blur-xl border-b border-indigo-100 shadow-[0_2px_20px_rgba(99,102,241,0.08)]">
+        {/* Gradient accent line */}
+        <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-indigo-400 via-purple-400 to-indigo-500" />
+
+        <div className="max-w-7xl mx-auto px-4 md:px-8 py-3 flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-tr from-indigo-500 to-purple-500 rounded-xl shadow-lg shadow-indigo-500/30">
-              <Settings className="text-white w-6 h-6" />
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-md shadow-indigo-500/25 text-white text-sm font-black">
+              A
             </div>
-            <h1 className="text-2xl font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
+            <h1 className="text-lg font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
           </div>
-          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
+          <div className="flex items-center gap-1.5">
             <button
               onClick={() => navigate('/user')}
-              className="px-3 md:px-5 py-2 md:py-2.5 bg-white border-2 border-indigo-100 text-indigo-600 rounded-full font-bold hover:bg-indigo-50 hover:border-indigo-200 transition-all duration-300 flex items-center justify-center gap-2 shadow-sm hover:-translate-y-0.5 whitespace-nowrap"
+              className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
             >
-              <ArrowLeft className="w-4 h-4" /> <span className="hidden md:inline text-base">Kembali Belanja</span>
+              Kembali Belanja
             </button>
             <button
               onClick={() => {
@@ -327,10 +428,9 @@ function Admin() {
                 localStorage.removeItem('authenticated');
                 navigate('/user');
               }}
-              className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:-translate-y-0.5 whitespace-nowrap"
+              className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all whitespace-nowrap"
             >
-              <LogOut size={18} />
-              <span className="hidden md:inline text-base">Logout</span>
+              Keluar
             </button>
           </div>
         </div>
@@ -340,8 +440,8 @@ function Admin() {
           <button
             onClick={() => setActiveTab('products')}
             className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'products'
-                ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30 transform -translate-y-0.5'
-                : 'bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200'
+              ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30 transform -translate-y-0.5'
+              : 'bg-white text-slate-500 hover:bg-indigo-50 hover:text-indigo-600 border border-slate-200 hover:border-indigo-200'
               }`}
           >
             <Package className="w-4 h-4" /> Manajemen Produk
@@ -349,8 +449,8 @@ function Admin() {
           <button
             onClick={() => setActiveTab('transactions')}
             className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'transactions'
-                ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/30 transform -translate-y-0.5'
-                : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 hover:border-blue-200'
+              ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg shadow-blue-500/30 transform -translate-y-0.5'
+              : 'bg-white text-slate-500 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 hover:border-blue-200'
               }`}
           >
             <Clock className="w-4 h-4" /> Riwayat Pembayaran ({transactions.length})
@@ -358,8 +458,8 @@ function Admin() {
           <button
             onClick={() => setActiveTab('posts')}
             className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'posts'
-                ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transform -translate-y-0.5'
-                : 'bg-white text-slate-500 hover:bg-fuchsia-50 hover:text-fuchsia-600 border border-slate-200 hover:border-fuchsia-200'
+              ? 'bg-gradient-to-r from-fuchsia-500 to-pink-500 text-white shadow-lg shadow-fuchsia-500/30 transform -translate-y-0.5'
+              : 'bg-white text-slate-500 hover:bg-fuchsia-50 hover:text-fuchsia-600 border border-slate-200 hover:border-fuchsia-200'
               }`}
           >
             <ImageIcon className="w-4 h-4" /> Manajemen Informasi ({posts.length})
@@ -460,6 +560,19 @@ function Admin() {
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                           placeholder="10"
                         />
+                        {/* Hint: selisih yang akan diambil dari gudang */}
+                        {editingId && originalItem && Number(formData.machine_stock) > Number(originalItem.machine_stock) && (() => {
+                          const tambahan = Number(formData.machine_stock) - Number(originalItem.machine_stock);
+                          const gudang = Number(formData.warehouse_stock);
+                          const cukup = gudang >= tambahan;
+                          return (
+                            <p className={`mt-1 text-xs font-semibold ${cukup ? 'text-emerald-600' : 'text-rose-600'}`}>
+                              {cukup
+                                ? `✓ Ambil ${tambahan} dari gudang (sisa gudang: ${gudang - tambahan})`
+                                : `✗ Kurang! Butuh ${tambahan}, gudang hanya ${gudang}`}
+                            </p>
+                          );
+                        })()}
                       </div>
                       <div>
                         <label className="block text-sm font-semibold mb-1">Stok Gudang</label>
@@ -472,8 +585,17 @@ function Admin() {
                           className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                           placeholder="40"
                         />
+                        {editingId && Number(formData.warehouse_stock) === 0 && (
+                          <p className="mt-1 text-xs font-semibold text-rose-500">⚠ Stok gudang kosong!</p>
+                        )}
                       </div>
                     </div>
+                    {/* Info box transfer stok */}
+                    {editingId && (
+                      <div className="bg-blue-50 border border-blue-200 rounded-xl px-4 py-3 text-xs text-blue-700 font-medium">
+                        ℹ Menambah <strong>Stok Mesin</strong> akan otomatis mengurangi <strong>Stok Gudang</strong> sebesar selisihnya. Mengurangi stok mesin tidak mengembalikan ke gudang.
+                      </div>
+                    )}
 
                     <div>
                       <label className="block text-sm font-semibold mb-1">Lokasi (Rak)</label>
@@ -485,6 +607,29 @@ function Admin() {
                         className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
                         placeholder="1"
                       />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-semibold mb-1">Foto Produk (Opsional)</label>
+                      <div className="flex items-center gap-4">
+                        {imagePreview && (
+                          <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden shrink-0">
+                            <img src={imagePreview} alt="Preview" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              setImageFile(file);
+                              setImagePreview(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100"
+                        />
+                      </div>
                     </div>
 
                     <div>
@@ -660,10 +805,10 @@ function Admin() {
                             </td>
                             <td className="px-6 py-4">
                               <span className={`px-3 py-1 rounded-full text-sm font-bold ${tx.payment_status === 'PAID'
-                                  ? 'bg-emerald-100 text-emerald-700'
-                                  : tx.payment_status === 'PENDING'
-                                    ? 'bg-yellow-100 text-yellow-700'
-                                    : 'bg-red-100 text-red-700'
+                                ? 'bg-emerald-100 text-emerald-700'
+                                : tx.payment_status === 'PENDING'
+                                  ? 'bg-yellow-100 text-yellow-700'
+                                  : 'bg-red-100 text-red-700'
                                 }`}>
                                 <div className="flex items-center gap-1.5 justify-center">
                                   {tx.payment_status === 'PAID' ? <><CheckCircle2 size={14} /> Dibayar</> :
@@ -792,15 +937,26 @@ function Admin() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-semibold mb-1">URL Gambar (Opsional)</label>
-                      <input
-                        type="text"
-                        name="image_url"
-                        value={postFormData.image_url}
-                        onChange={handlePostInputChange}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none"
-                        placeholder="https://example.com/image.jpg"
-                      />
+                      <label className="block text-sm font-semibold mb-1">Foto Informasi (Opsional)</label>
+                      <div className="flex items-center gap-4">
+                        {postImagePreview && (
+                          <div className="w-16 h-16 rounded-xl border border-slate-200 overflow-hidden shrink-0">
+                            <img src={postImagePreview} alt="Preview" className="w-full h-full object-cover" />
+                          </div>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            const file = e.target.files[0];
+                            if (file) {
+                              setPostImageFile(file);
+                              setPostImagePreview(URL.createObjectURL(file));
+                            }
+                          }}
+                          className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                        />
+                      </div>
                     </div>
 
                     <div>

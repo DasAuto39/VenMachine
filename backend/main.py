@@ -1,4 +1,5 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional, List, Dict
@@ -51,6 +52,12 @@ limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 app.add_middleware(SlowAPIMiddleware)
+
+# Mount static files directory
+import os
+os.makedirs("uploads", exist_ok=True)
+app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+
 
 
 # Skema data (Pydantic Models) untuk Request Body
@@ -475,6 +482,37 @@ async def delete_item_endpoint(item_id: int, current_user: dict = Depends(get_ad
     res = await delete_item(item_id)
     await publish_active_config_async()
     return res
+
+import uuid
+import shutil
+
+@app.post("/api/admin/upload")
+async def upload_image(file: UploadFile = File(...), current_user: dict = Depends(get_admin_user)):
+    """Upload an image and return its URL"""
+    try:
+        # VALIDASI KEAMANAN: Pastikan yang diupload BENAR-BENAR gambar
+        allowed_mime_types = ["image/jpeg", "image/png", "image/webp"]
+        if file.content_type not in allowed_mime_types:
+            raise HTTPException(status_code=400, detail="Format file tidak didukung. Harap gunakan JPG, PNG, atau WebP.")
+            
+        # Ambil ekstensi yang valid berdasarkan MIME type
+        ext_map = {"image/jpeg": "jpg", "image/png": "png", "image/webp": "webp"}
+        ext = ext_map[file.content_type]
+        
+        # Generate unique filename (mencegah path traversal dan menimpa file)
+        filename = f"{uuid.uuid4().hex}.{ext}"
+        filepath = os.path.join("uploads", filename)
+        
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+            
+        # Return relative URL
+        return {"url": f"/uploads/{filename}"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # Endpoint: Restock Item
 @app.post("/api/items/{item_id}/restock")

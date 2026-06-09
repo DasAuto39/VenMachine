@@ -26,6 +26,8 @@ function App({ onGoToAdmin, onGoToLogin }) {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
   const [currentGate, setCurrentGate] = useState("unknown");
+  const [gateDropdownOpen, setGateDropdownOpen] = useState(false);
+  const [gateConfirmPending, setGateConfirmPending] = useState(null); // gate yang menunggu konfirmasi
   const [notification, setNotification] = useState(null); // For toast notifications
 
   // Payment flow states
@@ -489,13 +491,27 @@ function App({ onGoToAdmin, onGoToLogin }) {
     setPaymentStatus(null);
 
     try {
+      // Deteksi detail bank/VA jika ada
+      let paymentDetail = 'MIDTRANS';
+      if (midtransResult) {
+        if (midtransResult.payment_type === 'bank_transfer' && midtransResult.va_numbers && midtransResult.va_numbers.length > 0) {
+          paymentDetail = `MIDTRANS_VA_${midtransResult.va_numbers[0].bank.toUpperCase()}`;
+        } else if (midtransResult.payment_type === 'echannel') {
+          paymentDetail = 'MIDTRANS_VA_MANDIRI';
+        } else if (midtransResult.payment_type === 'bank_transfer' && midtransResult.permata_va_number) {
+          paymentDetail = 'MIDTRANS_VA_PERMATA';
+        } else {
+          paymentDetail = `MIDTRANS_${midtransResult.payment_type.toUpperCase()}`;
+        }
+      }
+
       // Panggil endpoint /api/payment kita untuk memotong stok dan menjatuhkan barang
       const paymentRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/payment`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           transaction_id: transaction_id,
-          payment_method: 'MIDTRANS' // Flag khusus yang kita buat agar transaksi selalu SUKSES
+          payment_method: paymentDetail
         })
       });
 
@@ -579,101 +595,199 @@ function App({ onGoToAdmin, onGoToLogin }) {
           </div>
         )}
 
-        {/* 1. NAVBAR (Glassmorphism Effect) - FIXED at top */}
-        <header className="fixed top-0 left-0 right-0 z-40 w-full backdrop-blur-lg bg-white/80 border-b border-slate-200 px-6 py-3 flex items-center justify-between transition-all">
-          <div className="flex items-center gap-6">
-            {/* Logo */}
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-xl flex items-center justify-center shadow-emerald-500/30 shadow-lg text-white text-lg font-black shrink-0">
-                F
+        {/* Modal konfirmasi Gate */}
+        {gateConfirmPending && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
+            {/* Backdrop */}
+            <div className="absolute inset-0 bg-slate-900/50 backdrop-blur-sm" onClick={() => setGateConfirmPending(null)} />
+            {/* Card */}
+            <div className="relative bg-white rounded-3xl shadow-2xl shadow-slate-900/20 border border-slate-100 max-w-sm w-full p-7 animate-in">
+              {/* Icon */}
+              <div className="w-14 h-14 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-center justify-center mx-auto mb-5">
+                <svg className="w-7 h-7 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
               </div>
-              <span className="text-xl font-black tracking-tight text-slate-900 hidden md:block">
-                FRESH<span className="text-emerald-500">MART</span>
-              </span>
-            </div>
-
-            {/* Gate Selector */}
-            <div className="flex flex-col bg-amber-50/80 border border-amber-200/60 rounded-xl px-3 py-1.5 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-bold text-amber-800">Anda ada di:</span>
-                <select
-                  value={currentGate}
-                  onChange={(e) => {
-                    const newGate = e.target.value;
-                    setCurrentGate(newGate);
-                    localStorage.setItem('current_gate', newGate);
-                    const url = new URL(window.location);
-                    url.searchParams.set('gate', newGate);
-                    window.history.pushState({}, '', url);
-                  }}
-                  className="text-sm font-black text-amber-900 bg-transparent outline-none cursor-pointer"
+              <h3 className="text-center text-lg font-black text-slate-800 mb-1">
+                Konfirmasi Lokasi Gate
+              </h3>
+              <p className="text-center text-sm text-slate-500 font-medium mb-5 leading-relaxed">
+                Anda memilih <span className="font-bold text-emerald-700">{gateConfirmPending.label}</span>.
+                <br />
+                Pastikan Anda <span className="font-bold text-slate-700">benar-benar berada</span> di depan mesin <span className="font-bold text-emerald-700">{gateConfirmPending.label}</span>.
+              </p>
+              {/* Warning box */}
+              <div className="bg-amber-50 border border-amber-200 rounded-2xl px-4 py-3 mb-6">
+                <p className="text-xs text-amber-700 font-semibold leading-snug text-center">
+                  ⚠️ Salah memilih gate dapat menyebabkan barang keluar di mesin yang berbeda dan transaksi gagal dikonfirmasi.
+                </p>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setGateConfirmPending(null)}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all"
                 >
-                  <option value="unknown" disabled>Pilih Gate...</option>
-                  <option value="gate_1">Gate 1</option>
-                  <option value="gate_2">Gate 2</option>
-                  <option value="gate_3">Gate 3</option>
-                </select>
+                  Batal
+                </button>
+                <button
+                  onClick={() => {
+                    const g = gateConfirmPending;
+                    setCurrentGate(g.val);
+                    localStorage.setItem('current_gate', g.val);
+                    const url = new URL(window.location);
+                    url.searchParams.set('gate', g.val);
+                    window.history.pushState({}, '', url);
+                    setGateConfirmPending(null);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 shadow-md shadow-emerald-400/30 transition-all"
+                >
+                  Ya, Saya di {gateConfirmPending.label}
+                </button>
               </div>
-              <span className="text-[10px] font-semibold text-amber-700/80 mt-0.5 max-w-[180px] leading-tight">
-                Pastikan nomor gate sesuai dengan lokasi fisik mesin
-              </span>
             </div>
           </div>
+        )}
 
-          {/* Cart and Auth Buttons */}
-          <div className="flex items-center gap-1.5 md:gap-3 overflow-x-auto hide-scrollbar pb-1">
-            {user && (
-              <button
-                onClick={() => navigate('/profile')}
-                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-              >
-                <span className="text-base">👤 <span className="hidden md:inline">{user?.full_name || user?.username}</span></span>
-              </button>
-            )}
-            {user?.role === 'admin' && (
-              <button
-                onClick={() => navigate('/admin')}
-                className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-              >
-                <Settings size={18} className="md:hidden" />
-                <span className="hidden md:inline text-base">Dashboard Admin</span>
-              </button>
-            )}
-            <button
-              onClick={() => navigate('/information')}
-              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-            >
-              <Newspaper size={18} />
-              <span className="hidden md:inline text-base">Info & Promo</span>
-            </button>
-            <button
-              onClick={() => setIsCartOpen(true)}
-              className="relative flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
-            >
-              <ShoppingCart size={18} />
-              <span className="hidden md:inline text-base">Keranjang</span>
-              {cartItemCount > 0 && (
-                <span className="absolute -top-1 -right-1 md:-top-2 md:-right-2 bg-rose-500 text-white text-[10px] md:text-xs font-black w-5 h-5 md:w-6 md:h-6 flex items-center justify-center rounded-full border-2 border-white shadow-sm">
-                  {cartItemCount}
+        {/* Gate Not Selected — subtle floating ribbon */}
+        {currentGate === 'unknown' && (
+          <div className="fixed top-[62px] left-0 right-0 z-30 flex justify-center pointer-events-none">
+            <div className="bg-gradient-to-r from-rose-500 to-rose-600 text-white text-xs font-semibold px-6 py-1.5 rounded-b-2xl shadow-lg shadow-rose-400/30 tracking-wide">
+              Anda belum memilih gate — transaksi tidak dapat diproses
+            </div>
+          </div>
+        )}
+
+        {/* 1. NAVBAR */}
+        <header className="fixed top-0 left-0 right-0 z-40 w-full" style={{ minHeight: '62px' }}>
+          {/* Gradient accent line */}
+          <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500" />
+
+          <div className="w-full h-full backdrop-blur-xl bg-emerald-50/95 border-b border-emerald-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{ minHeight: '62px' }}>
+
+            {/* LEFT: logo + gate */}
+            <div className="flex items-center gap-4 md:gap-6">
+              {/* Logo */}
+              <div className="flex items-center gap-2.5 shrink-0">
+                <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-emerald-500/25 text-white text-sm font-black">
+                  F
+                </div>
+                <span className="text-base font-black tracking-tight text-slate-900 hidden sm:block">
+                  FRESH<span className="text-emerald-500">MART</span>
                 </span>
+              </div>
+
+              {/* Divider */}
+              <div className="hidden sm:block w-px h-6 bg-slate-200" />
+
+              {/* Gate custom dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setGateDropdownOpen(v => !v)}
+                  className={`flex items-center gap-2.5 px-3.5 py-2 rounded-xl text-sm font-semibold transition-all duration-200 ${currentGate === 'unknown'
+                    ? 'bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100'
+                    : 'bg-emerald-50 text-emerald-800 border border-emerald-200 hover:bg-emerald-100'
+                    }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${currentGate === 'unknown' ? 'bg-rose-400 animate-pulse' : 'bg-emerald-400'
+                    }`} />
+                  <span>
+                    {currentGate === 'unknown' ? 'Pilih gate...' : currentGate.replace('gate_', 'Gate ')}
+                  </span>
+                  <svg className={`w-3.5 h-3.5 transition-transform duration-200 ${gateDropdownOpen ? 'rotate-180' : ''} ${currentGate === 'unknown' ? 'text-rose-400' : 'text-emerald-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M19 9l-7 7-7-7" /></svg>
+                </button>
+
+                {gateDropdownOpen && (
+                  <>
+                    {/* Backdrop */}
+                    <div className="fixed inset-0 z-10" onClick={() => setGateDropdownOpen(false)} />
+                    {/* Panel */}
+                    <div className="absolute left-0 top-full mt-2 z-20 bg-white rounded-2xl shadow-xl shadow-slate-200/80 border border-slate-100 overflow-hidden w-52">
+                      <div className="px-4 pt-3.5 pb-2">
+                        <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Pilih Lokasi Mesin</p>
+                      </div>
+                      {[{ val: 'gate_1', label: 'Gate 1', desc: 'Keluaran Tengah' }, { val: 'gate_2', label: 'Gate 2', desc: 'Keluaran Kiri' }, { val: 'gate_3', label: 'Gate 3', desc: 'Keluaran Kanan' }].map(g => (
+                        <button
+                          key={g.val}
+                          onClick={() => {
+                            setGateDropdownOpen(false);
+                            setGateConfirmPending(g); // tampilkan modal konfirmasi dulu
+                          }}
+                          className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition-colors ${currentGate === g.val
+                            ? 'bg-emerald-50 text-emerald-800'
+                            : 'text-slate-700 hover:bg-slate-50'
+                            }`}
+                        >
+                          <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${currentGate === g.val ? 'bg-emerald-500' : 'bg-slate-200'}`} />
+                          <div>
+                            <p className="text-sm font-bold leading-tight">{g.label}</p>
+                            <p className="text-xs text-slate-400 font-medium">{g.desc}</p>
+                          </div>
+                          {currentGate === g.val && (
+                            <svg className="ml-auto w-4 h-4 text-emerald-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" /></svg>
+                          )}
+                        </button>
+                      ))}
+                      <div className="px-4 pb-3 pt-2">
+                        <p className="text-[10px] text-slate-400 font-medium leading-snug">Pastikan gate sesuai dengan posisi fisik mesin yang Anda gunakan.</p>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* RIGHT: nav buttons — white bg for contrast on mint navbar */}
+            <div className="flex items-center gap-1.5">
+              {user && (
+                <button
+                  onClick={() => navigate('/profile')}
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
+                >
+                  {user?.full_name?.split(' ')[0] || user?.username}
+                </button>
               )}
-            </button>
-            {user ? (
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => navigate('/admin')}
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
+                >
+                  Admin
+                </button>
+              )}
               <button
-                onClick={handleLogout}
-                className="flex items-center justify-center gap-2 bg-rose-50 border border-rose-200 hover:border-rose-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-rose-700 hover:text-rose-800 hover:bg-rose-100 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+                onClick={() => navigate('/information')}
+                className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
               >
-                <LogOut size={18} />
-                <span className="hidden md:inline text-base">Logout</span>
+                Info &amp; Promo
               </button>
-            ) : (
               <button
-                onClick={() => navigate('/login')}
-                className="flex items-center justify-center gap-2 bg-white border border-emerald-100 hover:border-emerald-300 px-3 md:px-5 py-2 md:py-2.5 rounded-full font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md whitespace-nowrap"
+                onClick={() => setIsCartOpen(true)}
+                className="relative px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
               >
-                <span className="text-base">🔐 <span className="hidden md:inline">Login</span></span>
+                Keranjang
+                {cartItemCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black min-w-[18px] min-h-[18px] flex items-center justify-center rounded-full border-2 border-white">
+                    {cartItemCount}
+                  </span>
+                )}
               </button>
-            )}
+              {user ? (
+                <button
+                  onClick={handleLogout}
+                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-white hover:text-rose-600 hover:border hover:border-rose-200 transition-all whitespace-nowrap"
+                >
+                  Keluar
+                </button>
+              ) : (
+                <button
+                  onClick={() => navigate('/login')}
+                  className="px-4 py-1.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
+                >
+                  Masuk
+                </button>
+              )}
+            </div>
           </div>
         </header>
 
@@ -690,6 +804,47 @@ function App({ onGoToAdmin, onGoToLogin }) {
               <h1 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Belanja Cepat,<br />Tanpa Antre Kasir.</h1>
               <p className="text-lg text-emerald-50 opacity-95 mx-auto">Pilih dari layar, bayar, dan ambil bahan makanan segar Anda langsung dari rak otomatis.</p>
             </div>
+          </div>
+
+          {/* Gate location warning card */}
+          <div className={`mb-8 rounded-2xl border px-5 py-4 flex items-start gap-4 transition-all ${currentGate === 'unknown'
+            ? 'bg-rose-50 border-rose-200'
+            : 'bg-amber-50/70 border-amber-200/80'
+            }`}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${currentGate === 'unknown' ? 'bg-rose-100' : 'bg-amber-100'
+              }`}>
+              <svg className={`w-5 h-5 ${currentGate === 'unknown' ? 'text-rose-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              {currentGate === 'unknown' ? (
+                <>
+                  <p className="text-sm font-black text-rose-700 mb-0.5">Anda belum memilih gate!</p>
+                  <p className="text-xs text-rose-600 font-medium leading-relaxed">
+                    Pilih gate terlebih dahulu melalui menu di pojok kiri atas. Pastikan gate yang dipilih sesuai dengan lokasi fisik mesin vending yang sedang Anda gunakan.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-sm font-black text-amber-700 mb-0.5">
+                    Anda terhubung ke <span className="text-emerald-700">{currentGate.replace('gate_', 'Gate ')}</span> — pastikan ini sudah benar!
+                  </p>
+                  <p className="text-xs text-amber-700/80 font-medium leading-relaxed">
+                    Periksa nomor atau label gate di mesin vending terdekat. Salah gate dapat mengakibatkan barang keluar di tempat yang berbeda.
+                  </p>
+                </>
+              )}
+            </div>
+            {currentGate !== 'unknown' && (
+              <button
+                onClick={() => setGateDropdownOpen(true)}
+                className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-all whitespace-nowrap mt-0.5"
+              >
+                Ganti Gate
+              </button>
+            )}
           </div>
 
           {/* Search Bar - Below Hero Banner, Full Width */}
@@ -753,8 +908,11 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 filteredItems.map((item) => (
                   <div
                     key={item.id}
-                    className={`bg-white border border-slate-200 rounded-3xl p-3 flex flex-col hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 transition-all duration-300 group ${item.machine_stock === 0 ? 'opacity-50 hover:border-slate-200 hover:shadow-slate-200/30' : ''
-                      }`}
+                    className={`bg-white border rounded-3xl p-3 flex flex-col transition-all duration-300 group ${
+                      item.machine_stock === 0
+                        ? 'border-slate-200 opacity-70 cursor-not-allowed'
+                        : 'border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 cursor-pointer'
+                    }`}
                     onClick={() => item.machine_stock > 0 && openProductDetail(item)}
                     title={item.description || item.name}
                   >
@@ -775,10 +933,11 @@ function App({ onGoToAdmin, onGoToLogin }) {
                       <div className={item.image_url ? "hidden" : "flex items-center justify-center w-full h-full"}>
                         <Package size={48} />
                       </div>
-                      {/* Out of Stock Badge */}
+                      {/* Out of Stock Overlay */}
                       {item.machine_stock === 0 && (
-                        <div className="absolute inset-0 bg-black/40 rounded-2xl flex items-center justify-center">
-                          <span className="text-white font-black text-lg bg-red-600 px-4 py-2 rounded-full">HABIS</span>
+                        <div className="absolute inset-0 bg-slate-900/50 rounded-2xl flex flex-col items-center justify-center gap-1">
+                          <span className="text-white font-black text-sm bg-rose-600 px-3 py-1 rounded-full tracking-wide">STOK HABIS</span>
+                          <span className="text-slate-200 text-[10px] font-semibold">Tidak tersedia saat ini</span>
                         </div>
                       )}
                     </div>
@@ -810,13 +969,23 @@ function App({ onGoToAdmin, onGoToLogin }) {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            addToCart(item);
+                            if (item.machine_stock > 0) addToCart(item);
                           }}
                           disabled={item.machine_stock === 0}
-                          className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-xl flex items-center justify-center font-bold py-2 hover:from-emerald-600 hover:to-teal-700 active:scale-95 transition-all disabled:opacity-30 disabled:from-slate-300 disabled:to-slate-300 gap-2 shadow-md shadow-emerald-500/20"
+                          className={`w-full rounded-xl flex items-center justify-center font-bold py-2 transition-all gap-2 ${
+                            item.machine_stock === 0
+                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                              : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 active:scale-95 shadow-md shadow-emerald-500/20'
+                          }`}
                         >
-                          <ShoppingCart size={16} />
-                          + Keranjang
+                          {item.machine_stock === 0 ? (
+                            <span className="text-sm">Stok Habis</span>
+                          ) : (
+                            <>
+                              <ShoppingCart size={16} />
+                              + Keranjang
+                            </>
+                          )}
                         </button>
                       </div>
                     </div>
