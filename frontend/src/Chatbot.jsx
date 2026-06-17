@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import ReactMarkdown from 'react-markdown';
 
 const Chatbot = ({ items, onAddToCart }) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -134,10 +135,12 @@ const Chatbot = ({ items, onAddToCart }) => {
                   {msg.content}
                 </div>
               ) : (
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm ${msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-tr-none'
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none'}`}>
-                  <p className="text-sm leading-relaxed whitespace-pre-wrap text-justify">{msg.content}</p>
+                <div className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm prose prose-sm prose-slate text-sm leading-relaxed whitespace-pre-wrap text-justify break-words ${msg.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-tr-none prose-p:text-white prose-strong:text-white'
+                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none prose-p:text-slate-700 prose-strong:text-indigo-600'}`}>
+                  <ReactMarkdown>
+                    {msg.content}
+                  </ReactMarkdown>
                 </div>
               )}
             </div>

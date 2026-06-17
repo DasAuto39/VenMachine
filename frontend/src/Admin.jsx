@@ -21,9 +21,10 @@ function Admin() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [analytics, setAnalytics] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
-  const [activeTab, setActiveTab] = useState('products'); // 'products' or 'transactions'
+  const [activeTab, setActiveTab] = useState('products'); // 'products', 'transactions', 'analytics'
   const [formData, setFormData] = useState({
     name: '',
     sku: '',
@@ -58,6 +59,7 @@ function Admin() {
   const [postImageFile, setPostImageFile] = useState(null);
   const [postImagePreview, setPostImagePreview] = useState(null);
 
+
   // Fetch all items and transactions
   useEffect(() => {
     // Role verification
@@ -85,11 +87,26 @@ function Admin() {
     fetchItems();
     fetchTransactions();
     fetchPosts();
+    fetchAnalytics();
 
     // Refresh transactions every 10 seconds
     const interval = setInterval(fetchTransactions, 10000);
     return () => clearInterval(interval);
   }, [navigate]);
+
+  const fetchAnalytics = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/analytics`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAnalytics(data);
+      }
+    } catch (err) {
+      console.error("Error fetching analytics:", err);
+    }
+  };
 
   const fetchItems = async () => {
     try {
@@ -110,6 +127,7 @@ function Admin() {
       console.error("Error fetching posts:", err);
     }
   };
+
 
   const fetchTransactions = async () => {
     try {
@@ -266,18 +284,55 @@ function Admin() {
     setShowForm(true);
   };
 
-  const handleDelete = async (id) => {
-    if (confirm("Yakin ingin menghapus produk ini?")) {
-      try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${id}`, {
-          method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
-        });
-        if (res.ok) {
-          alert("Produk berhasil dihapus!");
-          fetchItems();
+  const handleAddToShelf = (locId) => {
+    setShowForm(true);
+    setEditingId(null);
+    setOriginalItem(null);
+    setFormData({
+      name: '',
+      sku: '',
+      category: 'Lainnya',
+      price: '',
+      machine_stock: '',
+      warehouse_stock: '',
+      location_id: locId,
+      description: ''
+    });
+    setImageFile(null);
+    setImagePreview(null);
+  };
+
+  const handleDelete = async (itemId, locId) => {
+    if (itemId) {
+      if (confirm("Yakin ingin mengosongkan rak ini? (Data barang akan dihapus)")) {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/items/${itemId}`, {
+            method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (res.ok) {
+            alert("Rak berhasil dikosongkan!");
+            fetchItems();
+          }
+        } catch (err) {
+          console.error("Error:", err);
         }
-      } catch (err) {
-        console.error("Error:", err);
+      }
+    } else if (locId) {
+      if (confirm("Yakin ingin menghapus lokasi rak ini secara permanen?")) {
+        try {
+          const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/locations/${locId}`, {
+            method: 'DELETE', headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` }
+          });
+          if (res.ok) {
+            alert("Lokasi rak berhasil dihapus!");
+            fetchItems();
+          } else {
+            const errData = await res.json();
+            alert(`Gagal: ${errData.detail || 'Terjadi kesalahan'}`);
+          }
+        } catch (err) {
+          console.error("Error:", err);
+        }
       }
     }
   };
@@ -401,6 +456,10 @@ function Admin() {
     setPostImagePreview(null);
   };
 
+  const locationOccupiedBy = showForm && formData.location_id ? items.find(i => i.location_id === parseInt(formData.location_id) && i.id && i.id !== editingId) : null;
+  const isLocationOccupied = !!locationOccupiedBy;
+  const maxLocId = items.length > 0 ? Math.max(...items.map(i => i.location_id || 0)) : 0;
+
   return (
     <div className="min-h-screen bg-slate-50">
       {/* Header */}
@@ -464,6 +523,15 @@ function Admin() {
           >
             <ImageIcon className="w-4 h-4" /> Manajemen Informasi ({posts.length})
           </button>
+          <button
+            onClick={() => setActiveTab('analytics')}
+            className={`px-6 py-2.5 rounded-full font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'analytics'
+              ? 'bg-gradient-to-r from-orange-500 to-amber-500 text-white shadow-lg shadow-orange-500/30 transform -translate-y-0.5'
+              : 'bg-white text-slate-500 hover:bg-orange-50 hover:text-orange-600 border border-slate-200 hover:border-orange-200'
+              }`}
+          >
+            <BarChart className="w-4 h-4" /> Analitik Penjualan
+          </button>
         </div>
       </header>
 
@@ -478,6 +546,8 @@ function Admin() {
               onClick={() => {
                 setShowForm(true);
                 setEditingId(null);
+                const maxLocId = items.length > 0 ? Math.max(...items.map(i => i.location_id || 0)) : 0;
+                setFormData(prev => ({ ...prev, location_id: maxLocId + 1 }));
               }}
               className="mb-8 px-6 py-3 bg-gradient-to-r from-indigo-500 to-purple-500 text-white rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/40 transition-all duration-300 flex items-center gap-2 transform hover:-translate-y-1"
             >
@@ -604,9 +674,14 @@ function Admin() {
                         name="location_id"
                         value={formData.location_id}
                         onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none"
+                        className={`w-full px-4 py-2 border rounded-lg focus:ring-2 outline-none ${isLocationOccupied ? 'border-rose-300 focus:ring-rose-500 bg-rose-50' : 'border-slate-300 focus:ring-emerald-500'}`}
                         placeholder="1"
                       />
+                      {isLocationOccupied && (
+                        <p className="mt-1 text-xs font-semibold text-rose-500">
+                          ⚠ Rak ini sudah terisi oleh produk: {locationOccupiedBy.name}
+                        </p>
+                      )}
                     </div>
 
                     <div>
@@ -647,7 +722,12 @@ function Admin() {
                     <div className="flex gap-3 pt-6">
                       <button
                         type="submit"
-                        className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 rounded-full font-bold hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5 transition-all duration-300"
+                        disabled={isLocationOccupied}
+                        className={`flex-1 text-white py-3 rounded-full font-bold transition-all duration-300 ${
+                          isLocationOccupied 
+                            ? 'bg-slate-300 cursor-not-allowed' 
+                            : 'bg-gradient-to-r from-indigo-500 to-purple-500 hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5'
+                        }`}
                       >
                         {editingId ? 'Simpan Perubahan' : 'Tambahkan'}
                       </button>
@@ -659,6 +739,7 @@ function Admin() {
                         Batal
                       </button>
                     </div>
+
                   </form>
                 </div>
               </div>
@@ -682,44 +763,89 @@ function Admin() {
                     </tr>
                   </thead>
                   <tbody>
-                    {items.map((item) => (
-                      <tr key={item.id} className="border-b border-slate-200 hover:bg-slate-50 transition-colors">
-                        <td className="px-6 py-4 text-slate-700 font-semibold">{item.location_id || '-'}</td>
-                        <td className="px-6 py-4 text-slate-700 font-semibold">{item.name}</td>
-                        <td className="px-6 py-4 text-slate-600 font-mono">{item.sku}</td>
-                        <td className="px-6 py-4">
-                          <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">{item.category || 'Lainnya'}</span>
+                    {items.map((item, index) => (
+                      <tr key={item.id || `empty-${item.location_id}-${index}`} className={`border-b border-slate-200 transition-colors ${!item.id ? 'bg-slate-100/50 hover:bg-slate-100 text-slate-400' : 'hover:bg-slate-50'}`}>
+                        <td className="px-6 py-4 font-semibold">{item.location_id || '-'}</td>
+                        <td className="px-6 py-4 font-semibold">
+                          {!item.id ? (
+                            <span className="text-slate-400 italic">Barang Kosong</span>
+                          ) : (
+                            <span className="text-slate-700">{item.name}</span>
+                          )}
                         </td>
-                        <td className="px-6 py-4 text-right text-emerald-600 font-bold">
-                          Rp {(item.price || 0).toLocaleString('id-ID')}
+                        <td className="px-6 py-4 font-mono">{item.sku || '-'}</td>
+                        <td className="px-6 py-4">
+                          {item.id ? (
+                            <span className="px-2 py-1 bg-emerald-50 text-emerald-700 rounded-lg text-xs font-bold">{item.category || 'Lainnya'}</span>
+                          ) : '-'}
                         </td>
                         <td className="px-6 py-4 text-right font-bold">
-                          <span className={`px-2 py-1 rounded-lg ${item.machine_stock <= 2 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
-                            {String(item.machine_stock || 0)}
-                          </span>
+                          {item.id ? (
+                            <span className="text-emerald-600">Rp {(item.price || 0).toLocaleString('id-ID')}</span>
+                          ) : '-'}
                         </td>
-                        <td className="px-6 py-4 text-right font-bold text-slate-700">
-                          {String(item.warehouse_stock || 0)}
+                        <td className="px-6 py-4 text-right font-bold">
+                          {item.id ? (
+                            <span className={`px-2 py-1 rounded-lg ${item.machine_stock <= 2 ? 'bg-rose-100 text-rose-700' : 'bg-emerald-50 text-emerald-700'}`}>
+                              {String(item.machine_stock || 0)}
+                            </span>
+                          ) : '-'}
                         </td>
-                        <td className="px-6 py-4 text-center text-slate-600 font-semibold">
+                        <td className="px-6 py-4 text-right font-bold">
+                          {item.id ? (
+                            <span className="text-slate-700">{String(item.warehouse_stock || 0)}</span>
+                          ) : '-'}
+                        </td>
+                        <td className="px-6 py-4 text-center font-semibold">
                           {item.location_code || '-'}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex justify-center gap-2">
-                            <button
-                              onClick={() => handleEdit(item)}
-                              className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
-                              title="Edit"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(item.id)}
-                              className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
-                              title="Hapus"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
+                            {item.id && (
+                              <button
+                                onClick={() => handleEdit(item)}
+                                className="p-2.5 bg-indigo-50 text-indigo-600 rounded-xl hover:bg-indigo-100 hover:text-indigo-700 transition-all transform hover:-translate-y-0.5"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                            )}
+                            {!item.id && (
+                              <button
+                                onClick={() => handleAddToShelf(item.location_id)}
+                                className="p-2.5 bg-emerald-50 text-emerald-600 rounded-xl hover:bg-emerald-100 hover:text-emerald-700 transition-all transform hover:-translate-y-0.5"
+                                title="Isi Rak Ini"
+                              >
+                                <Plus className="w-4 h-4" />
+                              </button>
+                            )}
+                            {item.id ? (
+                                <button
+                                  onClick={() => handleDelete(item.id, null)}
+                                  className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                                  title="Kosongkan Rak (Hapus Barang)"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                            ) : (
+                                item.location_id === maxLocId ? (
+                                  <button
+                                    onClick={() => handleDelete(null, item.location_id)}
+                                    className="p-2.5 bg-rose-50 text-rose-600 rounded-xl hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                                    title="Hapus Rak Permanen"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                ) : (
+                                  <button
+                                    disabled
+                                    className="p-2.5 bg-slate-100 text-slate-300 rounded-xl cursor-not-allowed"
+                                    title="Rak kosong hanya bisa dihapus dari urutan paling akhir"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -1066,7 +1192,86 @@ function Admin() {
             </div>
           </>
         )}
-      </main>
+
+        {activeTab === 'analytics' && analytics && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              {/* Summary */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group">
+                <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-orange-100 to-amber-100 rounded-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
+                <h3 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2 relative z-10">
+                  <BarChart className="w-5 h-5 text-orange-500" /> Ringkasan Penjualan
+                </h3>
+                <div className="space-y-4 relative z-10">
+                  <div className="flex justify-between items-center p-4 bg-emerald-50 rounded-2xl border border-emerald-100">
+                    <span className="font-semibold text-emerald-800">Total Pendapatan</span>
+                    <span className="text-2xl font-black text-emerald-600">Rp {Number(analytics.total_sales).toLocaleString('id-ID')}</span>
+                  </div>
+                  <div className="flex justify-between items-center p-4 bg-blue-50 rounded-2xl border border-blue-100">
+                    <span className="font-semibold text-blue-800">Total Transaksi</span>
+                    <span className="text-2xl font-black text-blue-600">{analytics.total_transactions}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sales over time (Weekly) */}
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">Tren Mingguan</h3>
+                <div className="h-56 flex items-end justify-between gap-2 px-2 pb-6 border-b border-slate-100 relative">
+                  {analytics.sales_over_time.length > 0 ? analytics.sales_over_time.map((day, idx) => {
+                    const maxSales = Math.max(...analytics.sales_over_time.map(d => parseFloat(d.daily_sales)));
+                    const height = maxSales > 0 ? (parseFloat(day.daily_sales) / maxSales) * 100 : 0;
+                    return (
+                      <div key={idx} className="flex-1 flex flex-col items-center gap-2 group relative h-full">
+                        <div className="w-full relative bg-slate-50 rounded-t-xl h-full flex flex-col justify-end overflow-hidden group-hover:bg-slate-100 transition-colors border-b-2 border-slate-200">
+                          <div className="w-full bg-gradient-to-t from-orange-400 to-amber-300 rounded-t-xl transition-all duration-700 ease-out" style={{ height: `${height}%` }}></div>
+                        </div>
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
+                          <div className="bg-slate-800 text-white text-xs font-bold py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">
+                            Rp {parseFloat(day.daily_sales).toLocaleString('id-ID')}
+                          </div>
+                          <div className="w-2 h-2 bg-slate-800 rotate-45 absolute -bottom-1 left-1/2 -translate-x-1/2"></div>
+                        </div>
+                        <span className="absolute -bottom-6 text-[10px] sm:text-xs font-bold text-slate-500 whitespace-nowrap overflow-hidden text-ellipsis w-full text-center">
+                          {new Date(day.date).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' })}
+                        </span>
+                      </div>
+                    );
+                  }) : (
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="p-4 bg-slate-50 rounded-xl text-center text-slate-500 italic text-sm border border-slate-100 w-full max-w-xs">Belum ada data penjualan mingguan</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6">
+              <div className="bg-white rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                <h3 className="text-lg font-bold text-slate-800 mb-6">Top 10 Barang Terjual</h3>
+                <div className="space-y-4">
+                  {analytics.items_sold.length > 0 ? analytics.items_sold.map((item, idx) => {
+                    const maxSold = Math.max(...analytics.items_sold.map(i => i.total_sold));
+                    const width = maxSold > 0 ? (item.total_sold / maxSold) * 100 : 0;
+                    return (
+                      <div key={idx} className="relative group">
+                        <div className="flex justify-between items-center text-sm font-semibold mb-1 relative z-10 px-3 py-1">
+                          <span className="text-slate-700 truncate max-w-[75%] font-bold">{item.name}</span>
+                          <span className="text-emerald-700 bg-white/50 px-2 py-0.5 rounded-md shadow-sm border border-emerald-100/50">{item.total_sold} unit</span>
+                        </div>
+                        <div className="h-8 w-full bg-slate-50 rounded-xl overflow-hidden absolute top-0 left-0 right-0 border border-slate-100">
+                          <div className="h-full bg-gradient-to-r from-emerald-100 to-teal-100 rounded-xl transition-all duration-1000 ease-out group-hover:from-emerald-200 group-hover:to-teal-200" style={{ width: `${width}%` }}></div>
+                        </div>
+                      </div>
+                    );
+                  }) : (
+                    <div className="p-4 bg-slate-50 rounded-xl text-center text-slate-500 italic text-sm border border-slate-100">Belum ada data barang terjual</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}      </main>
     </div>
   );
 }

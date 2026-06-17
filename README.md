@@ -37,7 +37,17 @@ Jika `machine_stock` menipis, mesin akan secara otomatis mengisi ulang dari `war
 
 ## 📡 Komunikasi MQTT (Web ↔ ESP32)
 
-Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainkan menggunakan perantara **Broker MQTT** (contoh: HiveMQ) agar sistem berjalan *asynchronous* dan *real-time*.
+Komunikasi antar sistem tidak menggunakan HTTP Request langsung ke ESP, melainkan menggunakan perantara **Broker MQTT Publik** agar sistem berjalan *asynchronous* dan *real-time* dari mana saja asalkan terkoneksi internet.
+
+### 🌐 Detail Konfigurasi Broker Saat Ini
+Sistem web (Backend) saat ini telah di-*hardcode* untuk terkoneksi ke broker publik gratis dari EMQX. Untuk menghubungkan ESP32 milik Anda/teman Anda agar bisa membaca perintah dari Web, gunakan konfigurasi berikut di kode Arduino/C++ ESP32:
+
+*   **Broker (Server)**: `broker.emqx.io`
+*   **Port**: `1883`
+*   **Username / Password**: *(Kosongkan, tidak perlu)*
+*   **Client ID**: Gunakan ID acak (misal: `venmachine_esp32_123`) agar tidak bertabrakan dengan koneksi lain.
+
+> 💡 **Cara Kerja:** Pastikan ESP32 terhubung ke Internet (Wi-Fi/Hotspot). Selama ESP32 dan Laptop (Web Server) sama-sama terhubung ke internet dan me-*listen* ke broker `broker.emqx.io`, sistem akan saling terhubung dengan lancar meskipun berbeda jaringan!
 
 ### 1. Meminta Konfigurasi Aktif (ESP32 → Web)
 Digunakan oleh ESP32 (biasanya saat baru menyala/restart) untuk menanyakan index motor mana saja yang saat ini ada produknya di database.

@@ -35,7 +35,12 @@ from queries import (
     get_published_posts,
     create_post,
     update_post,
-    delete_post
+    delete_post,
+    get_all_locations,
+    create_location,
+    update_location,
+    delete_location,
+    get_analytics_data
 )
 
 app = FastAPI(title="Smart Storage API")
@@ -121,6 +126,11 @@ class ItemUpdate(BaseModel):
     description: str = None
     image_url: str = None
 
+class LocationCreate(BaseModel):
+    row_position: int
+    location_code: str
+    is_active: bool = True
+
 # Mengelola koneksi database saat server menyala/mati
 @app.on_event("startup")
 async def startup():
@@ -155,32 +165,39 @@ async def chat_endpoint(request: Request, req: ChatRequest):
     """Chatbot AI Endpoint with Dynamic DB Context"""
     available_items = await get_available_items()
     
-    # Format available items for the prompt
-    item_list_str = "\n".join([f"- ID: {item['id']} | Name: {item['name']} | Price: Rp{item['price']} | Stock: {item['machine_stock']}" for item in available_items])
+    # Format available items for the prompt including Description and Category
+    item_list_str = "\n".join([f"- ID: {item['id']} | Kategori: {item.get('category', 'Lainnya')} | Nama: {item['name']} | Harga: Rp{item['price']} | Stok: {item['machine_stock']} | Deskripsi: {item.get('description', '')}" for item in available_items])
     
     system_prompt = f"""
-Anda adalah Koki Ahli Masakan Indonesia untuk Smart Vending Machine.
-Bantu pengguna memasak dengan bahan yang tersedia.
+Anda adalah Asisten Cerdas Vending Machine Khusus Masakan Indonesia.
+Bantu pengguna berbelanja bahan makanan yang tersedia.
 
 STOK BAHAN:
 {item_list_str}
 
 TUGAS ANDA:
-1. Jika pengguna meminta saran masakan, berikan rekomendasi menu yang MASUK AKAL berdasarkan "STOK BAHAN" di atas. JANGAN menyarankan masakan aneh. Tanyakan apakah mereka ingin memasukkannya ke keranjang.
-2. JIKA pengguna membalas setuju/mengonfirmasi saran Anda (contoh: "oke", "ya", "tambahkan"), Anda WAJIB merespons dengan memasukkan ID barang ke dalam array `action_items` dan mengkonfirmasi bahwa barang telah ditambahkan.
-3. JIKA pengguna belum setuju/masih bertanya, `action_items` HARUS kosong [].
-4. PENTING: Dalam "message" yang Anda berikan ke pengguna, sebutkan NAMA BARANG saja dan cetak tebal (bold) menggunakan markdown (contoh: **Bayam Segar**), JANGAN PERNAH menyebutkan nomor ID (contoh: "ID 1", "ID 2"). ID barang HANYA boleh diletakkan di dalam array `action_items`.
-5. Berikan output HANYA dalam JSON valid, tanpa teks lain.
+1. PERKENALAN AWAL: Jika pengguna hanya menyapa (contoh: "Halo", "Hai", "Pagi"), perkenalkan diri Anda dengan ramah sebagai asisten dan tanyakan apa yang bisa Anda bantu. JANGAN memberikan rekomendasi sebelum diminta.
+2. REKOMENDASI SPESIFIK INDONESIA: Jika pengguna meminta rekomendasi, fokuslah pada MASAKAN INDONESIA secara umum. Jika pengguna secara spesifik meminta "tradisional", barulah rekomendasikan menu tradisional. Sesuaikan dengan konteks yang diminta pengguna (contoh: makanan yang bergizi untuk anak kecil, makanan lembut untuk orang tua, masakan pedas, dll) menggunakan "STOK BAHAN" di atas.
+3. JIKA pengguna membalas setuju/mengonfirmasi saran Anda (contoh: "oke", "ya", "tambahkan"), Anda WAJIB merespons dengan memasukkan ID barang ke dalam array `action_items` dan mengkonfirmasi bahwa barang telah ditambahkan.
+4. JIKA pengguna belum setuju/masih bertanya, `action_items` HARUS kosong [].
+5. PENTING: Dalam "message" yang Anda berikan ke pengguna, sebutkan NAMA BARANG saja dan cetak tebal (bold) menggunakan markdown (contoh: **Bayam Segar**), JANGAN PERNAH menyebutkan nomor ID (contoh: "ID 1", "ID 2"). ID barang HANYA boleh diletakkan di dalam array `action_items`.
+6. PENTING (VARIASI JAWABAN): Jangan mengulangi kalimat atau rekomendasi dari contoh di bawah ini (seperti selalu menyarankan Sayur Bening). Buatlah jawaban, gaya bahasa, sapaan, dan rekomendasi masakan yang sangat variatif, kreatif, dan natural sesuai dengan bahan yang sedang tersedia.
+7. Berikan output HANYA dalam JSON valid, tanpa teks lain.
 
+CONTOH STRUKTUR JSON (HANYA CONTOH FORMAT, BUAT KONTEN ANDA SENDIRI):
+{{
+  "message": "Halo! Saya asisten mesin otomatis Anda. Ada yang bisa saya bantu hari ini? Anda bisa menanyakan rekomendasi masakan khas Indonesia atau menu khusus untuk keluarga.",
+  "action_items": []
+}}
 CONTOH JSON JIKA MENAWARKAN:
 {{
-  "message": "Untuk masakan berkuah, saya sarankan Sayur Bening dengan **Bayam Segar**. Mau saya tambahkan ke keranjang?",
+  "message": "Untuk masakan berkuah yang segar dan sehat untuk si kecil, saya sarankan membuat Sayur Bening dengan **Bayam Segar** dan **Wortel Premium**. Mau saya tambahkan ke keranjang?",
   "action_items": []
 }}
 CONTOH JSON JIKA USER MENJAWAB SETUJU:
 {{
-  "message": "Baik, **Bayam Segar** telah ditambahkan ke keranjang Anda.",
-  "action_items": [2]
+  "message": "Baik, **Bayam Segar** dan **Wortel Premium** telah ditambahkan ke keranjang belanja Anda.",
+  "action_items": [1, 2]
 }}
 """
     
@@ -317,7 +334,7 @@ async def process_payment_endpoint(req: PaymentRequest):
             # Build payload untuk ESP32 (contoh array [1, 1, 2] jika qty > 1)
             items_to_dispense = []
             for item in dispensed_items:
-                items_to_dispense.extend([item['item_id']] * item['quantity'])
+                items_to_dispense.extend([item['location_id']] * item['quantity'])
                 
             # Publish perintah keluarkan barang
             publish_dispense(gate_id, items_to_dispense)
@@ -483,6 +500,24 @@ async def delete_item_endpoint(item_id: int, current_user: dict = Depends(get_ad
     await publish_active_config_async()
     return res
 
+# ===== ADMIN ENDPOINTS (Locations Management) =====
+
+@app.get("/api/admin/locations")
+async def get_locations_endpoint(current_user: dict = Depends(get_admin_user)):
+    return await get_all_locations()
+
+@app.post("/api/admin/locations")
+async def create_location_endpoint(loc: LocationCreate, current_user: dict = Depends(get_admin_user)):
+    return await create_location(loc.row_position, loc.location_code, loc.is_active)
+
+@app.put("/api/admin/locations/{loc_id}")
+async def update_location_endpoint(loc_id: int, loc: LocationCreate, current_user: dict = Depends(get_admin_user)):
+    return await update_location(loc_id, loc.row_position, loc.location_code, loc.is_active)
+
+@app.delete("/api/admin/locations/{loc_id}")
+async def delete_location_endpoint(loc_id: int, current_user: dict = Depends(get_admin_user)):
+    return await delete_location(loc_id)
+
 import uuid
 import shutil
 
@@ -580,3 +615,10 @@ async def update_post_endpoint(post_id: int, post: InformationPostUpdate, curren
 async def delete_post_endpoint(post_id: int, current_user: dict = Depends(get_admin_user)):
     """Delete a post"""
     return await delete_post(post_id)
+
+# ===== ADMIN ANALYTICS =====
+
+@app.get("/api/admin/analytics")
+async def admin_analytics_endpoint(current_user: dict = Depends(get_admin_user)):
+    """Get aggregated analytics data"""
+    return await get_analytics_data()

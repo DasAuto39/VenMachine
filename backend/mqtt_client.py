@@ -15,17 +15,19 @@ logger = logging.getLogger(__name__)
 main_loop = None
 
 import uuid
+try:
+    from paho.mqtt.enums import CallbackAPIVersion
+    client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
+    client = mqtt.Client(CallbackAPIVersion.VERSION1, client_id=client_id, clean_session=True)
+except ImportError:
+    client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
+    client = mqtt.Client(client_id=client_id, clean_session=True)
 
-# Initialize MQTT Client dengan ID unik agar tidak bentrok antara localhost dan server Render
-client_id = f"venmachine_backend_{uuid.uuid4().hex[:8]}"
-client = mqtt.Client(client_id=client_id, clean_session=True)
 
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("✅ Berhasil terkoneksi ke MQTT Broker")
         client.subscribe("vending/+/restock")
-# Initialize MQTT Client
-
         client.subscribe("vending/request_config")
     else:
         logger.error(f"❌ Gagal terkoneksi ke MQTT Broker, return code {rc}")
@@ -128,7 +130,8 @@ def start_mqtt(loop=None):
     main_loop = loop or asyncio.get_running_loop()
     
     try:
-        client.connect(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
+        # Gunakan connect_async agar tidak blocking saat startup, dan otomatis retry jika broker down
+        client.connect_async(MQTT_BROKER, MQTT_PORT, MQTT_KEEPALIVE)
         client.loop_start()
     except Exception as e:
         logger.error(f"Gagal memulai MQTT: {e}")
@@ -150,7 +153,11 @@ def publish_dispense(gate_id: int, items: list):
     
     try:
         result = client.publish(topic, json.dumps(payload), qos=1)
-        result.wait_for_publish()
-        logger.info(f"📤 MQTT Dispense terkirim ke {topic}: {payload}")
+        # Menghapus wait_for_publish() karena di paho-mqtt v2 akan raise exception jika
+        # client sedang reconnecting (padahal pesan sudah di-queue dan akan terkirim nanti).
+        if result.rc == mqtt.MQTT_ERR_SUCCESS:
+            logger.info(f"📤 MQTT Dispense terkirim ke {topic}: {payload}")
+        else:
+            logger.warning(f"⏳ MQTT Dispense diantrekan (koneksi sedang tidak siap) ke {topic}: {payload}")
     except Exception as e:
         logger.error(f"❌ Gagal mengirim MQTT Dispense: {e}")

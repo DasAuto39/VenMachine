@@ -415,10 +415,12 @@ async def get_all_items() -> List[Dict]:
     pool = DatabasePool.get_pool()
     async with pool.acquire() as connection:
         query = """
-            SELECT i.id, i.name, i.sku, i.category, i.price, i.machine_stock, i.warehouse_stock, i.description, i.image_url, i.location_id, s.row_position, s.location_code
+            SELECT i.id, i.name, i.sku, i.category, i.price, i.machine_stock, i.warehouse_stock, i.description, i.image_url, 
+                   COALESCE(i.location_id, s.id) as location_id, 
+                   s.row_position, s.location_code
             FROM items i
-            LEFT JOIN storage_locations s ON i.location_id = s.id
-            ORDER BY i.id
+            FULL OUTER JOIN storage_locations s ON i.location_id = s.id
+            ORDER BY COALESCE(s.row_position, i.id)
         """
         rows = await connection.fetch(query)
         return [dict(row) for row in rows]
@@ -567,6 +569,10 @@ async def delete_item(item_id: int) -> Dict:
     
     async with pool.acquire() as connection:
         try:
+            # Dapatkan location_id sebelum menghapus
+            item_record = await connection.fetchrow("SELECT location_id FROM items WHERE id = $1", item_id)
+            location_id = item_record['location_id'] if item_record else None
+
             result = await connection.fetchrow(
                 "DELETE FROM items WHERE id = $1 RETURNING id",
                 item_id
@@ -575,9 +581,74 @@ async def delete_item(item_id: int) -> Dict:
             if not result:
                 raise HTTPException(status_code=404, detail="Item not found")
             
+            # Sengaja tidak menghapus storage_location agar rak tetap ada meskipun kosong
+            
             return {"message": "Item deleted successfully", "id": item_id}
         except Exception as e:
             raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+# --- STORAGE LOCATIONS QUERIES ---
+class LocationRequest:
+    def __init__(self, row_position, location_code, is_active=True):
+        self.row_position = row_position
+        self.location_code = location_code
+        self.is_active = is_active
+
+async def get_all_locations() -> List[Dict]:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        rows = await connection.fetch("SELECT id, row_position, location_code, is_active FROM storage_locations ORDER BY row_position")
+        return [dict(row) for row in rows]
+
+async def create_location(row_position: int, location_code: str, is_active: bool = True) -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            result = await connection.fetchrow(
+                """
+                INSERT INTO storage_locations (row_position, location_code, is_active)
+                VALUES ($1, $2, $3)
+                RETURNING id, row_position, location_code, is_active
+                """,
+                row_position, location_code, is_active
+            )
+            return dict(result)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(status_code=400, detail="Row position or location code already exists")
+
+async def update_location(loc_id: int, row_position: int, location_code: str, is_active: bool) -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        try:
+            result = await connection.fetchrow(
+                """
+                UPDATE storage_locations
+                SET row_position = $1, location_code = $2, is_active = $3
+                WHERE id = $4
+                RETURNING id, row_position, location_code, is_active
+                """,
+                row_position, location_code, is_active, loc_id
+            )
+            if not result:
+                raise HTTPException(status_code=404, detail="Location not found")
+            return dict(result)
+        except asyncpg.UniqueViolationError:
+            raise HTTPException(status_code=400, detail="Row position or location code already exists")
+
+async def delete_location(loc_id: int) -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        items = await connection.fetch("SELECT id FROM items WHERE location_id = $1", loc_id)
+        if items:
+            raise HTTPException(status_code=400, detail="Cannot delete location because there are items using it. Move or delete the items first.")
+            
+        result = await connection.fetchrow(
+            "DELETE FROM storage_locations WHERE id = $1 RETURNING id",
+            loc_id
+        )
+        if not result:
+            raise HTTPException(status_code=404, detail="Location not found")
+        return {"message": "Location deleted successfully", "id": result['id']}
 
 
 # ===== LOGGING QUERIES =====
@@ -942,3 +1013,36 @@ async def process_restock(item_id: int) -> Dict:
                 "restocked_amount": amount_to_move
             }
 
+async def get_analytics_data() -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        # Total Sales
+        total_sales_record = await connection.fetchrow("SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(id) as total_transactions FROM transactions WHERE payment_status = 'PAID'")
+        
+        # Sales Over Time (Weekly)
+        sales_over_time_records = await connection.fetch("""
+            SELECT DATE_TRUNC('week', paid_at) as date, COALESCE(SUM(total_amount), 0) as daily_sales
+            FROM transactions 
+            WHERE payment_status = 'PAID'
+            GROUP BY DATE_TRUNC('week', paid_at)
+            ORDER BY DATE_TRUNC('week', paid_at) ASC
+        """)
+        
+        # Items Sold
+        items_sold_records = await connection.fetch("""
+            SELECT i.name, COALESCE(SUM(ti.quantity), 0) as total_sold
+            FROM transaction_items ti
+            JOIN transactions t ON ti.transaction_id = t.id
+            JOIN items i ON ti.item_id = i.id
+            WHERE t.payment_status = 'PAID'
+            GROUP BY i.name
+            ORDER BY total_sold DESC
+            LIMIT 10
+        """)
+        
+        return {
+            "total_sales": total_sales_record["total_sales"] if total_sales_record else 0,
+            "total_transactions": total_sales_record["total_transactions"] if total_sales_record else 0,
+            "sales_over_time": [{"date": str(r["date"]), "daily_sales": r["daily_sales"]} for r in sales_over_time_records],
+            "items_sold": [dict(r) for r in items_sold_records]
+        }
