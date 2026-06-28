@@ -27,6 +27,7 @@ share/python-wheels/
 MANIFEST
 
 # Project
+laporan_venmachine.txt
 .env
 frontend/node_modules/
 backend/__pycache__

@@ -217,7 +217,7 @@ function Admin() {
         });
         if (uploadRes.ok) {
           const uploadData = await uploadRes.json();
-          finalFormData.image_url = `${import.meta.env.VITE_API_BASE_URL}${uploadData.url}`;
+          finalFormData.image_url = uploadData.url;
         } else {
           alert("Gagal mengupload gambar!");
           return;
@@ -279,7 +279,7 @@ function Admin() {
       description: item.description || ''
     });
     setImageFile(null);
-    setImagePreview(item.image_url || null);
+    setImagePreview(item.image_url ? (item.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${item.image_url.substring(item.image_url.indexOf('/uploads/'))}` : item.image_url) : null);
     setEditingId(item.id);
     setShowForm(true);
   };
@@ -376,7 +376,7 @@ function Admin() {
         
         if (uploadRes.ok) {
           const uploadData = await uploadRes.json();
-          finalImageUrl = `${import.meta.env.VITE_API_BASE_URL}${uploadData.url}`;
+          finalImageUrl = uploadData.url;
         } else {
           alert("Gagal mengupload gambar post!");
           return;
@@ -427,7 +427,7 @@ function Admin() {
       is_published: post.is_published
     });
     setPostImageFile(null);
-    setPostImagePreview(post.image_url || null);
+    setPostImagePreview(post.image_url ? (post.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${post.image_url.substring(post.image_url.indexOf('/uploads/'))}` : post.image_url) : null);
     setEditingPostId(post.id);
     setShowPostForm(true);
   };
@@ -474,10 +474,10 @@ function Admin() {
             </div>
             <h1 className="text-lg font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
           </div>
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-3">
             <button
               onClick={() => navigate('/user')}
-              className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+              className="px-4 py-2 rounded-2xl text-sm font-bold bg-white text-indigo-700 border border-indigo-100 hover:bg-indigo-50 hover:border-indigo-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
             >
               Kembali Belanja
             </button>
@@ -487,7 +487,7 @@ function Admin() {
                 localStorage.removeItem('authenticated');
                 navigate('/user');
               }}
-              className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all whitespace-nowrap"
+              className="px-4 py-2 rounded-2xl text-sm font-bold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 hover:border-rose-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
             >
               Keluar
             </button>
@@ -557,7 +557,7 @@ function Admin() {
             {/* Form Modal */}
             {showForm && (
               <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-50 p-4 transition-opacity">
-                <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-8 max-w-md w-full shadow-2xl transform transition-all">
+                <div className="bg-white/95 backdrop-blur-xl border border-white/20 rounded-[2rem] p-6 md:p-8 max-w-md w-full max-h-[90vh] overflow-y-auto hide-scrollbar shadow-2xl transform transition-all">
                   <h2 className="text-2xl font-black mb-6 bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">
                     {editingId ? ' Edit Produk' : ' Tambah Produk Baru'}
                   </h2>
@@ -1223,8 +1223,8 @@ function Admin() {
                     const height = maxSales > 0 ? (parseFloat(day.daily_sales) / maxSales) * 100 : 0;
                     return (
                       <div key={idx} className="flex-1 flex flex-col items-center gap-2 group relative h-full">
-                        <div className="w-full relative bg-slate-50 rounded-t-xl h-full flex flex-col justify-end overflow-hidden group-hover:bg-slate-100 transition-colors border-b-2 border-slate-200">
-                          <div className="w-full bg-gradient-to-t from-orange-400 to-amber-300 rounded-t-xl transition-all duration-700 ease-out" style={{ height: `${height}%` }}></div>
+                        <div className="w-full max-w-[64px] mx-auto relative bg-slate-50 rounded-t-xl h-full flex flex-col justify-end overflow-hidden group-hover:bg-slate-100 transition-colors border-b-2 border-slate-200 shadow-sm">
+                          <div className="w-full bg-gradient-to-t from-orange-400 to-amber-300 rounded-t-xl transition-all duration-700 ease-out shadow-[inset_0_2px_4px_rgba(255,255,255,0.3)]" style={{ height: `${height}%` }}></div>
                         </div>
                         <div className="absolute -top-10 left-1/2 -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity z-10 pointer-events-none">
                           <div className="bg-slate-800 text-white text-xs font-bold py-1 px-2 rounded-lg whitespace-nowrap shadow-xl">

@@ -85,9 +85,9 @@ function Profile() {
 
       <div className="relative z-10">
         {/* Header */}
-        <header className="fixed top-0 left-0 right-0 z-40 w-full" style={{minHeight: '62px'}}>
+        <header className="fixed top-0 left-0 right-0 z-40 w-full" style={{ minHeight: '62px' }}>
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-emerald-400 via-teal-400 to-emerald-500" />
-          <div className="w-full h-full backdrop-blur-xl bg-emerald-50/95 border-b border-emerald-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{minHeight: '62px'}}>
+          <div className="w-full h-full backdrop-blur-xl bg-emerald-50/95 border-b border-emerald-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{ minHeight: '62px' }}>
             <div className="flex items-center gap-2.5 shrink-0">
               <div className="w-8 h-8 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-lg flex items-center justify-center shadow-md shadow-emerald-500/25 text-white text-sm font-black">
                 F
@@ -101,9 +101,9 @@ function Profile() {
               {user?.role === 'admin' && (
                 <button
                   onClick={() => navigate('/admin')}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-indigo-700 border border-indigo-200 hover:bg-indigo-50 hover:border-indigo-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+                  className="px-4 py-2 rounded-2xl text-sm font-bold bg-white text-emerald-700 border border-emerald-100 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
-                  Admin
+                  Dashboard Admin
                 </button>
               )}
               <button
@@ -200,10 +200,10 @@ function Profile() {
                             {tx.transaction_code}
                           </span>
                           <span className={`px-3 py-1 rounded-full text-xs font-bold flex items-center gap-1 ${tx.payment_status === 'PAID'
-                              ? 'bg-emerald-100 text-emerald-700'
-                              : tx.payment_status === 'PENDING'
-                                ? 'bg-amber-100 text-amber-700'
-                                : 'bg-rose-100 text-rose-700'
+                            ? 'bg-emerald-100 text-emerald-700'
+                            : tx.payment_status === 'PENDING'
+                              ? 'bg-amber-100 text-amber-700'
+                              : 'bg-rose-100 text-rose-700'
                             }`}>
                             {tx.payment_status === 'PAID' ? <><CheckCircle2 size={12} /> Berhasil</> :
                               tx.payment_status === 'PENDING' ? <><Clock size={12} /> Menunggu</> :

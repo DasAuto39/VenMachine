@@ -34,7 +34,7 @@ function ProductDetail({ product, isOpen, onClose, onAddToCart }) {
             <div className="w-full aspect-square bg-slate-50 rounded-3xl flex items-center justify-center overflow-hidden shadow-md relative group">
               {product.image_url && product.image_url.trim() ? (
                 <img 
-                  src={product.image_url} 
+                  src={product.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${product.image_url.substring(product.image_url.indexOf('/uploads/'))}` : product.image_url} 
                   alt={product.name}
                   className="w-full h-full object-cover"
                   onError={(e) => {

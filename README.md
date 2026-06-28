@@ -137,6 +137,30 @@ Semua *endpoint* API berjalan pada basis URL `http://localhost:8000`. Berikut ad
 
 ---
 
+## 🌍 Setup Ngrok (Solusi QR Code Statis & Akses Publik)
+
+Agar Web Vending Machine dapat diakses oleh HP pembeli dari mana saja (berbeda jaringan) dan Anda **tidak perlu mencetak ulang QR Code** setiap kali IP laptop berubah (akibat Hotspot HP), gunakan **Ngrok**.
+
+### 1. Cara Penggunaan Ngrok
+Ngrok memberikan Anda sebuah *Link Publik* statis yang membungkus koneksi lokal laptop Anda.
+1. Download dan *install* Ngrok di laptop.
+2. Dapatkan *Authtoken* dari *dashboard* Ngrok.
+3. Klaim satu buah *Free Static Domain* dari menu Domains (contoh: `rental-defiance-pry.ngrok-free.dev`).
+4. Jalankan *tunnel* menuju port Frontend (`5173`) dengan perintah:
+   ```bash
+   ngrok http 5173 --domain=domain-anda.ngrok-free.dev
+   ```
+5. Cetak QR Code yang berisi link `https` tersebut dan tempel di mesin Vending Anda.
+
+### 2. Kenapa `VITE_API_BASE_URL` Dikosongkan?
+Saat Anda menjalankan Ngrok, browser HP mengakses web via `https`. Jika *Frontend* mencoba melakukan panggilan API (*fetch*) ke `http://192.168.x.x` (IP lokal *Backend*), browser HP akan memblokirnya secara paksa karena masalah **Mixed Content** (menghubungkan `https` aman ke `http` tidak aman).
+
+Solusinya: Server Frontend (Vite) telah diatur sebagai **Proxy** (di dalam `vite.config.js`). Karena `VITE_API_BASE_URL` dikosongkan (tanpa IP angka), *request* API dari web di HP akan dikirim ke *path* relatif seperti `/api/items` (jadi otomatis menumpang *domain* Ngrok). Server Vite di laptop Anda kemudian mencegat *request* tersebut dan secara diam-diam meneruskannya ke kontainer *Backend* (`http://backend:8000`) di dalam Docker. Ini memecahkan *error Mixed Content* 100%!
+
+### 3. Apakah HP Pembeli Harus Satu Jaringan Wi-Fi?
+**TIDAK.** Karena QR Code yang dipindai mengarah ke Ngrok
+---
+
 ## 🚀 Cara Menjalankan Project Secara Lokal
 
 Sistem ini telah dibungkus sepenuhnya menggunakan **Docker** sehingga meminimalisir masalah *environment*.
@@ -159,4 +183,15 @@ Sistem ini telah dibungkus sepenuhnya menggunakan **Docker** sehingga meminimali
 *   Backend API (Swagger Docs): `http://localhost:8000/docs`
 
 ---
+
+## 🔐 User Credentials (Akun Demo)
+
+Cara untuk menambahkan user dengan role admin
+
+Di web bisa menambahkan akun terlebih dahulu dengan role user, lalu login sebagai user dan mengubah role user tersebut menjadi admin, setelah itu logout dan login kembali sebagai admin untuk bisa mengakses halaman admin
+
+Di dalam database bisa menggunakan query SQL berikut
+
+UPDATE users SET role = 'admin' WHERE username = 'uname(digantisendiri)'
+
 *Dokumentasi ini akan terus diperbarui sejalan dengan perkembangan integrasi Hardware-ke-Software tim capstone.*

@@ -24,6 +24,7 @@ from queries import (
     create_transaction,
     process_payment,
     get_transaction_status,
+    cancel_transaction,
     get_all_transactions,
     get_user_transactions,
     get_transaction_items,
@@ -165,8 +166,8 @@ async def chat_endpoint(request: Request, req: ChatRequest):
     """Chatbot AI Endpoint with Dynamic DB Context"""
     available_items = await get_available_items()
     
-    # Format available items for the prompt including Description and Category
-    item_list_str = "\n".join([f"- ID: {item['id']} | Kategori: {item.get('category', 'Lainnya')} | Nama: {item['name']} | Harga: Rp{item['price']} | Stok: {item['machine_stock']} | Deskripsi: {item.get('description', '')}" for item in available_items])
+    # Format available items secara singkat untuk menghemat token (tanpa deskripsi panjang)
+    item_list_str = "\n".join([f"- ID: {item['id']} | Kategori: {item.get('category', 'Lainnya')} | Nama: {item['name']} | Harga: Rp{item['price']} | Stok: {item['machine_stock']}" for item in available_items])
     
     system_prompt = f"""
 Anda adalah Asisten Cerdas Vending Machine Khusus Masakan Indonesia.
@@ -183,10 +184,20 @@ TUGAS ANDA:
 5. PENTING: Dalam "message" yang Anda berikan ke pengguna, sebutkan NAMA BARANG saja dan cetak tebal (bold) menggunakan markdown (contoh: **Bayam Segar**), JANGAN PERNAH menyebutkan nomor ID (contoh: "ID 1", "ID 2"). ID barang HANYA boleh diletakkan di dalam array `action_items`.
 6. PENTING (VARIASI JAWABAN): Jangan mengulangi kalimat atau rekomendasi dari contoh di bawah ini (seperti selalu menyarankan Sayur Bening). Buatlah jawaban, gaya bahasa, sapaan, dan rekomendasi masakan yang sangat variatif, kreatif, dan natural sesuai dengan bahan yang sedang tersedia.
 7. Berikan output HANYA dalam JSON valid, tanpa teks lain.
+8. PENOLAKAN HALUS: JIKA pengguna meminta resep atau bahan yang TIDAK ADA di dalam STOK BAHAN, Anda HARUS meminta maaf dengan sopan dan memberi tahu bahwa bahan tersebut sedang kosong. Lalu, berikan alternatif resep lain menggunakan HANYA bahan yang sedang TERSEDIA.
+9. BATASAN TOPIK: Anda adalah asisten Vending Machine. JIKA pengguna bertanya hal-hal di luar konteks makanan, bahan masakan, atau cara berbelanja di FreshMart, tolak dengan sopan dan kembalikan percakapan ke topik berbelanja.
+10. KUANTITAS: JIKA pengguna secara spesifik meminta jumlah barang lebih dari satu (contoh: minta 2 bayam dengan ID 1), Anda harus memasukkan ID tersebut berkali-kali ke dalam array `action_items` sesuai jumlah yang diminta (contoh: `[1, 1]`).
+11. ANGGARAN: Anda memiliki informasi harga. JIKA pengguna menyebutkan batas anggaran (budget), berikan rekomendasi kombinasi bahan masakan yang total harganya TIDAK MELEBIHI anggaran tersebut.
+12. PERSETUJUAN SEBAGIAN: Saat pengguna menyetujui rekomendasi, baca baik-baik apakah mereka menyetujui semua rekomendasi atau hanya sebagian. HANYA masukkan ID barang ke `action_items` yang secara eksplisit disetujui oleh pengguna.
+13. PROFIL USIA & DIET: Perhatikan kata kunci usia (anak, bayi, lansia) atau pantangan (diet, alergi). Jangan merekomendasikan masakan pedas/keras untuk balita atau lansia. Utamakan sayur dan masakan rebusan/kukus untuk permintaan diet sehat.
+14. MASAKAN DAERAH (REGIONAL): JIKA pengguna meminta masakan khas daerah tertentu (Padang, Sunda, Jawa, Bali, dll), gunakan pengetahuan kuliner nusantara Anda untuk meracik menu dari bahan yang TERSEDIA.
+15. PROFIL RASA & WAKTU MAKAN: JIKA pengguna meminta rasa tertentu (Pedas, Gurih, Segar) atau waktu (Sarapan, Makan Malam), sesuaikan resepnya. (Contoh: Kuah segar sangat cocok untuk siang hari).
+16. CROSS-SELLING (PENAWARAN PELENGKAP): Jika pengguna telah menyetujui untuk membeli suatu barang, cobalah tawarkan SATU bahan pelengkap lain yang ada di STOK BAHAN untuk menyempurnakan masakannya secara natural, jika tidak ada bahan pelengkap yang cocok, jangan memaksakan.
+17. KEPRIBADIAN (TONE): Gunakan sapaan yang hangat, sopan, dan ramah selayaknya asisten belanja yang ceria. Jangan membalas dengan bahasa yang terlalu kaku atau teknis.
 
 CONTOH STRUKTUR JSON (HANYA CONTOH FORMAT, BUAT KONTEN ANDA SENDIRI):
 {{
-  "message": "Halo! Saya asisten mesin otomatis Anda. Ada yang bisa saya bantu hari ini? Anda bisa menanyakan rekomendasi masakan khas Indonesia atau menu khusus untuk keluarga.",
+  "message": "Halo! Saya asisten mesin otomatis Anda. Ada yang bisa saya bantu hari ini? Anda bisa menanyakan rekomendasi masakan Indonesia atau Menu Makanan yang anda Inginkan .",
   "action_items": []
 }}
 CONTOH JSON JIKA MENAWARKAN:
@@ -211,7 +222,7 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
     contents_payload = []
     
     if req.history:
-        for msg in req.history[-5:]: # Ambil 5 riwayat terakhir
+        for msg in req.history[-3:]: # Kurangi history menjadi 3 riwayat terakhir untuk menghemat token
             role = msg.get("role", "user")
             content = msg.get("content", "")
             
@@ -233,55 +244,61 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
         "parts": [{"text": req.message}]
     })
 
-    try:
-        # Menggunakan model gemini-2.5-flash (versi stabil yang mungkin tidak sepadat 'latest')
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key={gemini_api_key}"
-        
-        payload = {
-            "system_instruction": {
-                "parts": {"text": system_prompt}
-            },
-            "contents": contents_payload,
-            "generationConfig": {
-                "temperature": 0.6,
-                "response_mime_type": "application/json" # Memaksa Gemini untuk mengembalikan format JSON yang valid
+    import asyncio
+    max_retries = 3
+    
+    for attempt in range(max_retries):
+        try:
+            # Menggunakan model gemini-1.5-flash yang sangat cepat dan stabil
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+            
+            payload = {
+                "system_instruction": {
+                    "parts": {"text": system_prompt}
+                },
+                "contents": contents_payload,
+                "generationConfig": {
+                    "temperature": 0.6,
+                    "maxOutputTokens": 150, # Membatasi output agar AI merespons dengan cepat dan padat
+                    "response_mime_type": "application/json" # Memaksa Gemini untuk mengembalikan format JSON yang valid
+                }
             }
-        }
-        
-        response = requests.post(url, json=payload, timeout=30)
-        response.raise_for_status()
-        data = response.json()
-        
-        # Ekstrak teks balasan dari struktur payload Gemini
-        raw_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
-        
-        if not raw_text:
-            raise json.JSONDecodeError("Empty response from Gemini", "", 0)
             
-        parsed = json.loads(raw_text)
-        
-        # Fallback safeguard jika format dari AI tidak ada
-        if "message" not in parsed:
-            parsed["message"] = "Terjadi kesalahan format dari AI."
-        if "action_items" not in parsed:
-            parsed["action_items"] = []
+            # Set timeout lebih kecil, karena kita akan mencoba berulang kali jika gagal
+            response = requests.post(url, json=payload, timeout=20)
+            response.raise_for_status()
+            data = response.json()
             
-        return parsed
-        
-    except requests.exceptions.RequestException as e:
-        print("Gemini API Connection Error:", e)
-        # Jika API response error, mungkin error response content bisa membantu di terminal
-        if hasattr(e, 'response') and e.response is not None:
-            print("Response:", e.response.text)
-        return {
-            "message": "Maaf, asisten AI saat ini sedang offline. Silakan tambahkan barang ke keranjang secara manual.",
-            "action_items": []
-        }
-    except json.JSONDecodeError as e:
-        print("Gemini JSON Parsing Error:", e, "Raw output:", raw_text if 'raw_text' in locals() else 'None')
-        return {
-            "message": "Maaf, saya tidak dapat memproses permintaan Anda saat ini. Silakan pilih barang secara manual.",
-            "action_items": []
+            # Ekstrak teks balasan dari struktur payload Gemini
+            raw_text = data.get("candidates", [{}])[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+            
+            if not raw_text:
+                raise json.JSONDecodeError("Empty response from Gemini", "", 0)
+                
+            parsed = json.loads(raw_text)
+            
+            # Fallback safeguard jika format dari AI tidak ada
+            if "message" not in parsed:
+                parsed["message"] = "Terjadi kesalahan format dari AI."
+            if "action_items" not in parsed:
+                parsed["action_items"] = []
+                
+            return parsed
+            
+        except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
+            if attempt < max_retries - 1:
+                # Menunggu sebelum mencoba lagi (Exponential backoff sederhana: 1s, 2s)
+                await asyncio.sleep(1 * (attempt + 1))
+                continue
+                
+            print(f"Gemini API Error after {max_retries} attempts:", e)
+            if isinstance(e, requests.exceptions.RequestException) and hasattr(e, 'response') and e.response is not None:
+                print("Response:", e.response.text)
+                
+            return {
+                "message": "Maaf, asisten cerdas sedang sibuk melayani banyak antrean. Anda bisa langsung menekan tombol 'Tambah' pada etalase produk di bawah ya!",
+                "action_items": []
+            }
         }
 
 
@@ -374,6 +391,10 @@ async def get_midtrans_token(request: Request, req: MidtransTokenRequest):
         },
         "callbacks": {
             "finish": frontend_url
+        },
+        "expiry": {
+            "unit": "minutes",
+            "duration": 3
         }
     }
     
@@ -432,6 +453,11 @@ async def payment_callback_endpoint(req: PaymentCallbackRequest):
 async def get_transaction_status_endpoint(transaction_id: int):
     """Get transaction and payment status"""
     return await get_transaction_status(transaction_id)
+
+@app.post("/api/transaction/{transaction_id}/cancel")
+async def cancel_transaction_endpoint(transaction_id: int):
+    """Membatalkan transaksi secara manual (misal: user menutup popup Midtrans)"""
+    return await cancel_transaction(transaction_id)
 
 # Endpoint 2: Menerima request pengambilan barang (Dari UI atau LLM)
 @app.post("/api/dispense")

@@ -39,7 +39,7 @@ async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id:
         async with connection.transaction():
             try:
                 # Create transaction (PENDING until payment)
-                expires_at = datetime.utcnow() + timedelta(minutes=5)  # 5 min to pay
+                expires_at = datetime.utcnow() + timedelta(minutes=4)  # 4 min buffer for reservation
                 
                 result = await connection.fetchrow(
                     """
@@ -54,12 +54,36 @@ async def create_transaction(gate_id: int, items_cart: Dict[int, Dict], user_id:
                 
                 # Save transaction items detail
                 for item_id_str, cart_item in items_cart.items():
+                    item_id = int(item_id_str)
+                    
+                    # Lock the item row to prevent race conditions
+                    current_stock = await connection.fetchval(
+                        "SELECT machine_stock FROM items WHERE id = $1 FOR UPDATE", 
+                        item_id
+                    )
+                    
+                    # Check active stock vs pending reservations
+                    reserved = await connection.fetchval(
+                        """
+                        SELECT COALESCE(SUM(ti.quantity), 0)
+                        FROM transaction_items ti
+                        JOIN transactions t ON t.id = ti.transaction_id
+                        WHERE ti.item_id = $1 
+                          AND t.payment_status = 'PENDING' 
+                          AND t.expired_at > NOW()
+                        """,
+                        item_id
+                    )
+                    
+                    if current_stock - reserved < cart_item['qty']:
+                        raise HTTPException(status_code=400, detail=f"Maaf, sisa stok untuk {cart_item['item']['name']} sedang diproses/dibayar oleh pengguna lain.")
+                        
                     await connection.execute(
                         """
                         INSERT INTO transaction_items (transaction_id, item_id, item_name, quantity, unit_price)
                         VALUES ($1, $2, $3, $4, $5)
                         """,
-                        transaction_id, int(item_id_str),
+                        transaction_id, item_id,
                         cart_item['item']['name'],
                         cart_item['qty'],
                         cart_item['item']['price']
@@ -116,7 +140,7 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                         "UPDATE transactions SET payment_status = $1 WHERE id = $2",
                         'CANCELLED', transaction_id
                     )
-                    raise HTTPException(status_code=400, detail="Payment window expired (5 minutes)")
+                    raise HTTPException(status_code=400, detail="Waktu pembayaran telah habis (3 menit)")
                 
                 # Setup status and display method
                 if is_midtrans:
@@ -190,6 +214,27 @@ async def process_payment(transaction_id: int, payment_method: str) -> Dict:
                 raise
             except Exception as e:
                 raise HTTPException(status_code=500, detail=f"Database error: {str(e)}")
+
+
+async def cancel_transaction(transaction_id: int) -> Dict:
+    """Membatalkan transaksi secara manual untuk langsung melepas penguncian stok."""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        transaction = await connection.fetchrow(
+            "SELECT id, payment_status FROM transactions WHERE id = $1",
+            transaction_id
+        )
+        if not transaction:
+            raise HTTPException(status_code=404, detail="Transaction not found")
+            
+        if transaction['payment_status'] == 'PENDING':
+            await connection.execute(
+                "UPDATE transactions SET payment_status = 'CANCELLED' WHERE id = $1",
+                transaction_id
+            )
+            return {"status": "SUCCESS", "message": "Transaksi dibatalkan. Kunci stok dilepas."}
+        else:
+            return {"status": "IGNORED", "message": f"Transaksi sudah dalam status {transaction['payment_status']}"}
 
 
 async def get_transaction_status(transaction_id: int) -> Dict:

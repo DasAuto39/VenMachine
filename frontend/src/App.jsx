@@ -36,6 +36,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
   const [transactionId, setTransactionId] = useState(null);
   const [paymentMethod, setPaymentMethod] = useState("QRIS");
   const [paymentStatus, setPaymentStatus] = useState(null); // null, 'success', 'failed'
+  const [checkoutError, setCheckoutError] = useState(null);
 
   // Read gate from URL parameter
   useEffect(() => {
@@ -412,6 +413,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
   const handleCheckout = async () => {
     if (Object.keys(cart).length === 0) return;
 
+    setCheckoutError(null);
     setIsProcessing(true);
 
     try {
@@ -469,8 +471,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
           onError: function (result) {
             showNotification('Pembayaran gagal! Silakan coba lagi.', 'error');
           },
-          onClose: function () {
-            showNotification('Anda menutup popup pembayaran sebelum menyelesaikannya', 'error');
+          onClose: async function () {
+            showNotification('Anda menutup popup pembayaran. Kunci stok dilepas.', 'error');
+            try {
+              const baseUrl = import.meta.env.VITE_API_BASE_URL || '';
+              await fetch(`${baseUrl}/api/transaction/${transaction_id}/cancel`, { method: 'POST' });
+            } catch (e) {
+              console.error("Gagal membatalkan transaksi", e);
+            }
           }
         })
       } else {
@@ -480,6 +488,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
     } catch (err) {
       console.error("Checkout error:", err);
       showNotification(` Error: ${err.message}`, 'error');
+      setCheckoutError(err.message);
       setIsProcessing(false);
     }
   };
@@ -738,36 +747,40 @@ function App({ onGoToAdmin, onGoToLogin }) {
             </div>
 
             {/* RIGHT: nav buttons — white bg for contrast on mint navbar */}
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-3 overflow-x-auto hide-scrollbar snap-x snap-mandatory sm:overflow-visible max-w-[55vw] sm:max-w-none pl-1 py-1">
               {user && (
                 <button
                   onClick={() => navigate('/profile')}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
+                  className="shrink-0 snap-start flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold bg-white text-emerald-800 border border-emerald-100 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
-                  {user?.full_name?.split(' ')[0] || user?.username}
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center text-[10px]">
+                    {(user?.full_name?.charAt(0) || user?.username?.charAt(0))?.toUpperCase()}
+                  </span>
+                  Halo, {user?.full_name?.split(' ')[0] || user?.username}
                 </button>
               )}
               {user?.role === 'admin' && (
                 <button
                   onClick={() => navigate('/admin')}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
+                  className="shrink-0 snap-start px-4 py-2 rounded-2xl text-sm font-bold bg-white text-emerald-700 border border-emerald-100 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
-                  Admin
+                  Dashboard Admin
                 </button>
               )}
               <button
                 onClick={() => navigate('/information')}
-                className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap hidden sm:block"
+                className="shrink-0 snap-start px-4 py-2 rounded-2xl text-sm font-bold bg-white text-slate-600 border border-slate-200 hover:bg-slate-50 hover:border-slate-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
               >
                 Info &amp; Promo
               </button>
               <button
                 onClick={() => setIsCartOpen(true)}
-                className="relative px-3.5 py-1.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
+                className="shrink-0 snap-start relative px-5 py-2 rounded-2xl text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white shadow-md shadow-emerald-500/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap flex items-center gap-2"
               >
+                <ShoppingCart size={16} />
                 Keranjang
                 {cartItemCount > 0 && (
-                  <span className="absolute -top-1.5 -right-1.5 bg-rose-500 text-white text-[10px] font-black min-w-[18px] min-h-[18px] flex items-center justify-center rounded-full border-2 border-white">
+                  <span className="absolute -top-2 -right-2 bg-rose-500 text-white text-[10px] font-black min-w-[20px] min-h-[20px] flex items-center justify-center rounded-full border-2 border-white shadow-sm">
                     {cartItemCount}
                   </span>
                 )}
@@ -775,14 +788,14 @@ function App({ onGoToAdmin, onGoToLogin }) {
               {user ? (
                 <button
                   onClick={handleLogout}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-white hover:text-rose-600 hover:border hover:border-rose-200 transition-all whitespace-nowrap"
+                  className="shrink-0 snap-start px-4 py-2 rounded-2xl text-sm font-bold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 hover:border-rose-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
                   Keluar
                 </button>
               ) : (
                 <button
                   onClick={() => navigate('/login')}
-                  className="px-4 py-1.5 rounded-xl text-sm font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
+                  className="shrink-0 snap-start px-5 py-2 rounded-2xl text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
                 >
                   Masuk
                 </button>
@@ -794,71 +807,82 @@ function App({ onGoToAdmin, onGoToLogin }) {
         <main className="max-w-7xl mx-auto px-6 py-8 pt-28">
 
           {/* 2. HERO BANNER */}
-          <div className="relative overflow-hidden bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 rounded-3xl p-12 text-white mb-12 shadow-xl shadow-emerald-600/20">
-            <div className="absolute top-0 right-0 -mt-10 -mr-10 w-96 h-96 bg-white opacity-5 rounded-full blur-3xl"></div>
-            <div className="absolute bottom-0 left-0 -mb-10 -ml-10 w-80 h-80 bg-teal-400 opacity-5 rounded-full blur-3xl"></div>
+          <div className="relative overflow-hidden bg-gradient-to-br from-emerald-800 via-emerald-600 to-teal-700 rounded-[2.5rem] p-12 md:p-16 text-white mb-12 shadow-[0_20px_60px_-15px_rgba(16,185,129,0.4)]">
+            <div className="absolute top-0 right-0 w-full h-full bg-[url('https://www.transparenttextures.com/patterns/cubes.png')] opacity-10"></div>
+            <div className="absolute top-0 right-0 -mt-20 -mr-20 w-[30rem] h-[30rem] bg-emerald-400/30 rounded-full blur-[100px] animate-float"></div>
+            <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-[25rem] h-[25rem] bg-teal-300/20 rounded-full blur-[80px] animate-float-reverse"></div>
             <div className="relative z-10 text-center max-w-3xl mx-auto">
-              <span className="inline-block py-2 px-4 rounded-full bg-white/10 border border-white/20 text-xs font-bold tracking-wider mb-6 uppercase backdrop-blur-sm">
-                Supermarket Otomatis
+              <span className="inline-block py-2 px-5 rounded-full bg-white/10 border border-white/20 text-xs font-bold tracking-widest mb-6 uppercase backdrop-blur-md shadow-lg shadow-black/5">
+                Supermarket Tanpa Antrian
               </span>
-              <h1 className="text-5xl md:text-6xl font-black mb-6 leading-tight">Belanja Cepat,<br />Tanpa Antre Kasir.</h1>
-              <p className="text-lg text-emerald-50 opacity-95 mx-auto">Pilih dari layar, bayar, dan ambil bahan makanan segar Anda langsung dari rak otomatis.</p>
+              <h1 className="text-5xl md:text-7xl font-black mb-6 leading-[1.1] tracking-tight text-white drop-shadow-md">Belanja Cepat,<br />Tanpa Kasir.</h1>
+              <p className="text-lg md:text-xl text-emerald-50 max-w-xl mx-auto font-medium leading-relaxed drop-shadow-sm">Pilih produk favorit Anda dari layar cerdas kami, bayar dengan mudah, dan bawa pulang kesegarannya dalam hitungan detik.</p>
             </div>
           </div>
 
-          {/* Gate location warning card */}
-          <div className={`mb-8 rounded-2xl border px-5 py-4 flex items-start gap-4 transition-all ${currentGate === 'unknown'
-            ? 'bg-rose-50 border-rose-200'
-            : 'bg-amber-50/70 border-amber-200/80'
+          {/* Gate location warning card - Overlaps Hero Banner */}
+          <div className={`relative z-20 -mt-10 md:-mt-20 mx-auto max-w-4xl mb-8 rounded-3xl border p-5 md:px-6 md:py-5 flex flex-col sm:flex-row items-start sm:items-center gap-4 md:gap-5 transition-all shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur-xl ${currentGate === 'unknown'
+            ? 'bg-rose-50/90 border-rose-200'
+            : 'bg-amber-50/90 border-amber-200/80'
             }`}>
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 mt-0.5 ${currentGate === 'unknown' ? 'bg-rose-100' : 'bg-amber-100'
-              }`}>
-              <svg className={`w-5 h-5 ${currentGate === 'unknown' ? 'text-rose-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </div>
-            <div className="flex-1">
-              {currentGate === 'unknown' ? (
-                <>
-                  <p className="text-sm font-black text-rose-700 mb-0.5">Anda belum memilih gate!</p>
-                  <p className="text-xs text-rose-600 font-medium leading-relaxed">
-                    Pilih gate terlebih dahulu melalui menu di pojok kiri atas. Pastikan gate yang dipilih sesuai dengan lokasi fisik mesin vending yang sedang Anda gunakan.
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-sm font-black text-amber-700 mb-0.5">
-                    Anda terhubung ke <span className="text-emerald-700">{currentGate.replace('gate_', 'Gate ')}</span> — pastikan ini sudah benar!
-                  </p>
-                  <p className="text-xs text-amber-700/80 font-medium leading-relaxed">
-                    Periksa nomor atau label gate di mesin vending terdekat. Salah gate dapat mengakibatkan barang keluar di tempat yang berbeda.
-                  </p>
-                </>
-              )}
+            <div className="flex gap-4 items-start flex-1">
+              <div className={`w-12 h-12 rounded-2xl flex items-center justify-center shrink-0 mt-0.5 ${currentGate === 'unknown' ? 'bg-rose-100' : 'bg-amber-100'
+                }`}>
+                <svg className={`w-6 h-6 ${currentGate === 'unknown' ? 'text-rose-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+              </div>
+              <div className="flex-1 mt-1">
+                {currentGate === 'unknown' ? (
+                  <>
+                    <p className="text-base font-black text-rose-700 mb-1">Anda belum memilih gate!</p>
+                    <p className="text-sm text-rose-600 font-medium leading-relaxed">
+                      Pilih gate terlebih dahulu melalui menu di pojok kiri atas. Pastikan gate yang dipilih sesuai dengan lokasi fisik mesin vending yang sedang Anda gunakan.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-base font-black text-amber-700 mb-1">
+                      Anda terhubung ke <span className="text-emerald-700">{currentGate.replace('gate_', 'Gate ')}</span> — pastikan ini sudah benar!
+                    </p>
+                    <p className="text-sm text-amber-700/80 font-medium leading-relaxed">
+                      Periksa nomor atau label gate di mesin vending terdekat. Salah gate dapat mengakibatkan barang keluar di tempat yang berbeda.
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
             {currentGate !== 'unknown' && (
               <button
                 onClick={() => setGateDropdownOpen(true)}
-                className="shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold bg-amber-100 text-amber-700 hover:bg-amber-200 transition-all whitespace-nowrap mt-0.5"
+                className="w-full sm:w-auto shrink-0 px-5 py-2.5 rounded-xl text-sm font-bold bg-white text-amber-700 border border-amber-200 hover:bg-amber-100 transition-all whitespace-nowrap mt-2 sm:mt-0 shadow-sm"
               >
                 Ganti Gate
               </button>
             )}
           </div>
 
-          {/* Search Bar - Below Hero Banner, Full Width */}
-          <div className="relative group mb-10 max-w-2xl mx-auto w-full">
-            <input
-              type="text"
-              placeholder="Cari apel, beras, atau minyak..."
-              className="w-full pl-12 pr-4 py-3 bg-slate-100/50 border border-slate-200 rounded-2xl outline-none text-sm transition-all focus:bg-white focus:border-emerald-400 focus:ring-4 focus:ring-emerald-500/10"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <svg className="absolute left-4 top-3.5 w-5 h-5 opacity-50 group-focus-within:opacity-100 group-focus-within:text-emerald-500 transition-all" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
+          {/* Search Bar - Below Warning */}
+          <div className="relative group mb-12 max-w-3xl mx-auto w-full z-10 px-6 md:px-0">
+            <div className="absolute inset-0 bg-emerald-100/30 blur-xl rounded-full"></div>
+            <div className="relative bg-white/80 backdrop-blur-xl border border-slate-200 p-2 rounded-full shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex items-center transition-all duration-300 focus-within:shadow-[0_8px_40px_rgba(16,185,129,0.15)] focus-within:bg-white focus-within:border-emerald-200">
+              <div className="pl-6 pr-3 text-emerald-500">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Cari apel segar, minuman dingin..."
+                className="w-full bg-transparent border-none outline-none text-base font-medium text-slate-700 placeholder-slate-400 py-3 pr-6"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+              <button className="bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-white px-8 py-3 rounded-full font-bold shadow-md shadow-emerald-500/25 transition-all hover:shadow-lg hover:-translate-y-0.5 shrink-0 hidden sm:block">
+                Cari
+              </button>
+            </div>
           </div>
 
           {/* 3. KATEGORI */}
@@ -880,9 +904,9 @@ function App({ onGoToAdmin, onGoToLogin }) {
                   <button
                     key={idx}
                     onClick={() => setSelectedCategory(cat)}
-                    className={`shrink-0 px-6 py-3 font-semibold rounded-2xl transition-all ${isSelected
-                      ? `bg-gradient-to-r ${colorClass} text-white shadow-lg shadow-emerald-500/30`
-                      : 'bg-white border border-slate-200 text-slate-600 hover:text-slate-900 hover:border-slate-300 hover:shadow-md hover:-translate-y-1'
+                    className={`shrink-0 px-6 py-3 font-bold rounded-2xl transition-all duration-300 ${isSelected
+                      ? `bg-gradient-to-r ${colorClass} text-white shadow-[0_8px_20px_-6px_rgba(16,185,129,0.4)] -translate-y-1`
+                      : 'bg-white/80 backdrop-blur border border-slate-100 text-slate-500 hover:text-slate-800 hover:bg-white hover:shadow-md hover:-translate-y-0.5'
                       }`}
                   >
                     {cat}
@@ -908,22 +932,21 @@ function App({ onGoToAdmin, onGoToLogin }) {
                 filteredItems.map((item) => (
                   <div
                     key={item.id}
-                    className={`bg-white border rounded-3xl p-3 flex flex-col transition-all duration-300 group ${
-                      item.machine_stock === 0
-                        ? 'border-slate-200 opacity-70 cursor-not-allowed'
-                        : 'border-slate-200 hover:shadow-xl hover:shadow-slate-200/50 hover:border-emerald-200 cursor-pointer'
-                    }`}
+                    className={`bg-white/70 backdrop-blur-xl border border-white rounded-[2rem] p-4 flex flex-col transition-all duration-500 group ${item.machine_stock === 0
+                        ? 'opacity-60 cursor-not-allowed grayscale-[20%]'
+                        : 'hover:bg-white hover:shadow-[0_20px_40px_-15px_rgba(0,0,0,0.05)] hover:-translate-y-2 cursor-pointer'
+                      }`}
                     onClick={() => item.machine_stock > 0 && openProductDetail(item)}
                     title={item.description || item.name}
                   >
 
                     {/* Kotak Gambar dengan Fallback Icon */}
-                    <div className="relative w-full aspect-square bg-slate-50 rounded-2xl mb-4 flex items-center justify-center text-5xl group-hover:bg-emerald-50 transition-colors overflow-hidden text-slate-300">
+                    <div className="relative w-full aspect-[4/3] bg-gradient-to-br from-slate-100 to-slate-50 rounded-3xl mb-5 flex items-center justify-center group-hover:shadow-inner transition-all overflow-hidden text-slate-300">
                       {item.image_url ? (
                         <img
-                          src={item.image_url}
+                          src={item.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${item.image_url.substring(item.image_url.indexOf('/uploads/'))}` : item.image_url}
                           alt={item.name}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                           onError={(e) => {
                             e.target.style.display = 'none';
                             e.target.nextSibling.style.display = 'flex';
@@ -933,61 +956,61 @@ function App({ onGoToAdmin, onGoToLogin }) {
                       <div className={item.image_url ? "hidden" : "flex items-center justify-center w-full h-full"}>
                         <Package size={48} />
                       </div>
+
+                      {/* Hover Description Overlay */}
+                      {item.description && item.machine_stock > 0 && (
+                        <div className="absolute inset-0 bg-emerald-900/80 backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-all duration-300 flex items-center justify-center p-4 text-center z-10 pointer-events-none translate-y-2 group-hover:translate-y-0">
+                          <p className="text-white text-xs font-medium line-clamp-4 leading-relaxed drop-shadow-sm">
+                            {item.description}
+                          </p>
+                        </div>
+                      )}
+
                       {/* Out of Stock Overlay */}
                       {item.machine_stock === 0 && (
-                        <div className="absolute inset-0 bg-slate-900/50 rounded-2xl flex flex-col items-center justify-center gap-1">
-                          <span className="text-white font-black text-sm bg-rose-600 px-3 py-1 rounded-full tracking-wide">STOK HABIS</span>
-                          <span className="text-slate-200 text-[10px] font-semibold">Tidak tersedia saat ini</span>
+                        <div className="absolute inset-0 bg-slate-900/40 rounded-3xl flex flex-col items-center justify-center gap-1 backdrop-blur-[2px] z-20">
+                          <span className="text-white font-black text-xs bg-rose-600 px-4 py-1.5 rounded-full tracking-wider shadow-lg">STOK HABIS</span>
                         </div>
                       )}
                     </div>
 
                     <div className="px-2 flex-1 flex flex-col">
-                      <h3 className="text-sm font-bold text-emerald-800 line-clamp-2 leading-snug mb-1">{item.name}</h3>
-                      <p className="text-xs text-slate-400 font-mono mb-4">{item.sku}</p>
+                      <h3 className="text-base font-bold text-slate-800 line-clamp-2 leading-snug mb-2 group-hover:text-emerald-600 transition-colors">{item.name}</h3>
 
-                      {/* Deskripsi singkat */}
-                      {item.description && (
-                        <p className="text-xs text-slate-500 line-clamp-2 mb-2 italic">{item.description}</p>
-                      )}
-
-                      <div className="mt-auto pt-3 border-t border-slate-100">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex flex-col">
-                            <span className="text-xs text-slate-500">Harga</span>
-                            <span className="text-sm font-black text-emerald-600">
+                      <div className="mt-auto pt-2 mb-4 border-b border-slate-100 pb-3">
+                        <div className="flex flex-col">
+                          <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider mb-1">Harga & Stok</p>
+                          <div className="flex flex-wrap items-center justify-between gap-1.5">
+                            <p className="text-lg font-black text-emerald-500 drop-shadow-sm leading-none break-words">
                               Rp {(item.price || 0).toLocaleString('id-ID')}
-                            </span>
-                          </div>
-                          <div className="flex flex-col text-right">
-                            <span className="text-xs text-slate-500">Stok Mesin</span>
-                            <span className={`text-sm font-black ${item.machine_stock > 5 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                              {item.machine_stock > 0 ? `${item.machine_stock}` : 'Habis'}
+                            </p>
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider ${item.machine_stock > 5 ? 'bg-slate-100 text-slate-600' : 'bg-rose-100 text-rose-600'}`}>
+                              {item.machine_stock > 0 ? `Sisa ${item.machine_stock}` : 'Habis'}
                             </span>
                           </div>
                         </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (item.machine_stock > 0) addToCart(item);
-                          }}
-                          disabled={item.machine_stock === 0}
-                          className={`w-full rounded-xl flex items-center justify-center font-bold py-2 transition-all gap-2 ${
-                            item.machine_stock === 0
-                              ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
-                              : 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white hover:from-emerald-600 hover:to-teal-700 active:scale-95 shadow-md shadow-emerald-500/20'
-                          }`}
-                        >
-                          {item.machine_stock === 0 ? (
-                            <span className="text-sm">Stok Habis</span>
-                          ) : (
-                            <>
-                              <ShoppingCart size={16} />
-                              + Keranjang
-                            </>
-                          )}
-                        </button>
                       </div>
+
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (item.machine_stock > 0) addToCart(item);
+                        }}
+                        disabled={item.machine_stock === 0}
+                        className={`w-full rounded-2xl flex items-center justify-center font-bold py-3 transition-all gap-2 ${item.machine_stock === 0
+                            ? 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                            : 'bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-400 hover:to-teal-400 active:scale-95 shadow-lg shadow-emerald-500/20'
+                          }`}
+                      >
+                        {item.machine_stock === 0 ? (
+                          <span className="text-sm uppercase tracking-wider text-xs">Stok Habis</span>
+                        ) : (
+                          <>
+                            <ShoppingCart size={18} />
+                            Tambah
+                          </>
+                        )}
+                      </button>
                     </div>
                   </div>
                 ))
@@ -1033,8 +1056,18 @@ function App({ onGoToAdmin, onGoToLogin }) {
                     <div key={itemId} className="bg-white border border-slate-200 p-3 rounded-2xl shadow-sm">
                       <div className="flex justify-between items-start mb-2">
                         <div className="flex items-center gap-3 flex-1">
-                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-xl shrink-0 text-slate-400">
-                            <Package size={24} />
+                          <div className="w-12 h-12 bg-slate-50 rounded-xl flex items-center justify-center text-xl shrink-0 text-slate-400 overflow-hidden relative">
+                            {item.image_url ? (
+                              <img
+                                src={item.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${item.image_url.substring(item.image_url.indexOf('/uploads/'))}` : item.image_url}
+                                alt={item.name}
+                                className="w-full h-full object-cover"
+                                onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }}
+                              />
+                            ) : null}
+                            <div className={item.image_url ? "hidden w-full h-full items-center justify-center" : "flex w-full h-full items-center justify-center"}>
+                              <Package size={24} />
+                            </div>
                           </div>
                           <div>
                             <p className="text-sm font-bold text-slate-800">{item.name}</p>
@@ -1076,6 +1109,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
 
               {/* Wrapper untuk subtotal & tombol checkout */}
               <div className="p-6 bg-white border-t border-slate-200 mt-auto">
+                {checkoutError && (
+                  <div className="mb-4 p-3 bg-rose-50 border border-rose-200 text-rose-600 text-sm font-semibold rounded-xl flex items-start gap-2">
+                    <span className="text-lg leading-none mt-0.5">⚠️</span>
+                    <span>{checkoutError}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center mb-4">
                   <span className="text-slate-500 font-medium">Subtotal</span>
                   <span className="text-slate-800 font-bold">Rp {cartTotal.toLocaleString('id-ID')}</span>

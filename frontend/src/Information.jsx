@@ -62,13 +62,24 @@ function Information() {
               </span>
             </div>
 
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-3 overflow-x-auto hide-scrollbar sm:overflow-visible pl-1 py-1">
               {user && (
                 <button
                   onClick={() => navigate('/profile')}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-teal-700 border border-teal-200 hover:bg-teal-50 hover:border-teal-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+                  className="shrink-0 flex items-center gap-2 px-4 py-2 rounded-2xl text-sm font-bold bg-white text-emerald-800 border border-emerald-100 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
-                  {user?.full_name?.split(' ')[0] || user?.username}
+                  <span className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-400 to-teal-500 text-white flex items-center justify-center text-[10px]">
+                    {(user?.full_name?.charAt(0) || user?.username?.charAt(0))?.toUpperCase()}
+                  </span>
+                  Halo, {user?.full_name?.split(' ')[0] || user?.username}
+                </button>
+              )}
+              {user?.role === 'admin' && (
+                <button
+                  onClick={() => navigate('/admin')}
+                  className="shrink-0 px-4 py-2 rounded-2xl text-sm font-bold bg-white text-emerald-700 border border-emerald-100 hover:bg-emerald-50 hover:border-emerald-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+                >
+                  Dashboard Admin
                 </button>
               )}
               <button
@@ -76,7 +87,7 @@ function Information() {
                   const savedGate = localStorage.getItem('current_gate');
                   navigate(savedGate ? `/user?gate=${savedGate}` : '/user');
                 }}
-                className="px-3.5 py-1.5 rounded-xl text-sm font-bold bg-white text-emerald-700 border border-emerald-200 hover:bg-emerald-50 hover:border-emerald-400 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
+                className="shrink-0 px-5 py-2 rounded-2xl text-sm font-bold bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-md shadow-emerald-500/30 transition-all hover:shadow-lg hover:-translate-y-0.5 whitespace-nowrap"
               >
                 Kembali Belanja
               </button>
@@ -87,7 +98,7 @@ function Information() {
                     localStorage.removeItem('authenticated');
                     navigate('/user');
                   }}
-                  className="px-3.5 py-1.5 rounded-xl text-sm font-bold text-rose-500 hover:bg-rose-50 hover:text-rose-700 transition-all whitespace-nowrap"
+                  className="shrink-0 px-4 py-2 rounded-2xl text-sm font-bold text-rose-500 bg-white border border-rose-100 hover:bg-rose-50 hover:border-rose-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
                   Keluar
                 </button>
@@ -122,7 +133,7 @@ function Information() {
                   {post.image_url && (
                     <div className="w-full h-64 md:h-80 bg-slate-100 relative overflow-hidden">
                       <img 
-                        src={post.image_url} 
+                        src={post.image_url.includes('/uploads/') ? `${import.meta.env.VITE_API_BASE_URL}${post.image_url.substring(post.image_url.indexOf('/uploads/'))}` : post.image_url} 
                         alt={post.title}
                         className="w-full h-full object-cover"
                         onError={(e) => { e.target.style.display = 'none'; }}
