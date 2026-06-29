@@ -1058,36 +1058,84 @@ async def process_restock(item_id: int) -> Dict:
                 "restocked_amount": amount_to_move
             }
 
-async def get_analytics_data() -> Dict:
+async def get_analytics_data(month: Optional[int] = None, year: Optional[int] = None) -> Dict:
     pool = DatabasePool.get_pool()
+    
+    # Default to current month/year if not provided
+    if month is None or year is None:
+        now = datetime.now()
+        month = now.month
+        year = now.year
+
     async with pool.acquire() as connection:
-        # Total Sales
-        total_sales_record = await connection.fetchrow("SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(id) as total_transactions FROM transactions WHERE payment_status = 'PAID'")
-        
-        # Sales Over Time (Weekly)
-        sales_over_time_records = await connection.fetch("""
-            SELECT DATE_TRUNC('week', paid_at) as date, COALESCE(SUM(total_amount), 0) as daily_sales
+        # Total Sales for the selected month
+        total_sales_record = await connection.fetchrow("""
+            SELECT COALESCE(SUM(total_amount), 0) as total_sales, COUNT(id) as total_transactions 
             FROM transactions 
             WHERE payment_status = 'PAID'
-            GROUP BY DATE_TRUNC('week', paid_at)
-            ORDER BY DATE_TRUNC('week', paid_at) ASC
-        """)
+            AND EXTRACT(MONTH FROM paid_at) = $1 
+            AND EXTRACT(YEAR FROM paid_at) = $2
+        """, month, year)
         
-        # Items Sold
+        # Sales Over Time (Weekly in Selected Month)
+        sales_over_time_records = await connection.fetch("""
+            SELECT CAST(TO_CHAR(paid_at, 'W') AS INTEGER) as week_no, COALESCE(SUM(total_amount), 0) as daily_sales
+            FROM transactions 
+            WHERE payment_status = 'PAID' 
+            AND EXTRACT(MONTH FROM paid_at) = $1 
+            AND EXTRACT(YEAR FROM paid_at) = $2
+            GROUP BY CAST(TO_CHAR(paid_at, 'W') AS INTEGER)
+            ORDER BY week_no ASC
+        """, month, year)
+        
+        # Items Sold (Bisa di-sort di frontend, filtered by selected month)
         items_sold_records = await connection.fetch("""
             SELECT i.name, COALESCE(SUM(ti.quantity), 0) as total_sold
             FROM transaction_items ti
             JOIN transactions t ON ti.transaction_id = t.id
             JOIN items i ON ti.item_id = i.id
             WHERE t.payment_status = 'PAID'
+            AND EXTRACT(MONTH FROM t.paid_at) = $1 
+            AND EXTRACT(YEAR FROM t.paid_at) = $2
             GROUP BY i.name
             ORDER BY total_sold DESC
-            LIMIT 10
-        """)
+        """, month, year)
         
         return {
             "total_sales": total_sales_record["total_sales"] if total_sales_record else 0,
             "total_transactions": total_sales_record["total_transactions"] if total_sales_record else 0,
-            "sales_over_time": [{"date": str(r["date"]), "daily_sales": r["daily_sales"]} for r in sales_over_time_records],
+            "sales_over_time": [{"week_no": r["week_no"], "daily_sales": r["daily_sales"]} for r in sales_over_time_records],
             "items_sold": [dict(r) for r in items_sold_records]
         }
+
+# ===== KATEGORI MANAGEMENT =====
+
+async def get_categories() -> List[Dict]:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        records = await connection.fetch("SELECT id, name FROM categories ORDER BY name ASC")
+        return [dict(r) for r in records]
+
+async def create_category(name: str) -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        # Cek apakah kategori sudah ada
+        existing = await connection.fetchval("SELECT id FROM categories WHERE name = $1", name)
+        if existing:
+            raise HTTPException(status_code=400, detail="Kategori sudah ada")
+        record = await connection.fetchrow("INSERT INTO categories (name) VALUES ($1) RETURNING id, name", name)
+        return dict(record)
+
+async def delete_category(category_id: int) -> bool:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        category = await connection.fetchrow("SELECT name FROM categories WHERE id = $1", category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail="Kategori tidak ditemukan")
+            
+        in_use_count = await connection.fetchval("SELECT COUNT(*) FROM items WHERE category = $1", category['name'])
+        if in_use_count > 0:
+            raise HTTPException(status_code=400, detail=f"Gagal: Kategori '{category['name']}' tidak dapat dihapus karena masih digunakan oleh {in_use_count} produk.")
+            
+        await connection.execute("DELETE FROM categories WHERE id = $1", category_id)
+        return True

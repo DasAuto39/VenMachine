@@ -92,7 +92,7 @@ const Chatbot = ({ items, onAddToCart }) => {
       {/* Chat Bubble Button */}
       <button
         onClick={() => setIsOpen(true)}
-        className={`fixed bottom-6 right-6 p-4 bg-indigo-600 text-white rounded-full shadow-2xl hover:bg-indigo-700 transition-all z-40 flex items-center justify-center ${isOpen ? 'scale-0' : 'scale-100'}`}
+        className={`fixed bottom-6 right-6 p-4 bg-indigo-600 text-white rounded-none-full shadow-2xl hover:bg-indigo-700 transition-all z-40 flex items-center justify-center ${isOpen ? 'scale-0' : 'scale-100'}`}
       >
         <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
@@ -106,19 +106,19 @@ const Chatbot = ({ items, onAddToCart }) => {
         {/* Header */}
         <div className="bg-indigo-600 p-4 text-white flex justify-between items-center shadow-md">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-indigo-500 rounded-full flex items-center justify-center border-2 border-indigo-400">
+            <div className="w-10 h-10 bg-indigo-500 rounded-none-full flex items-center justify-center border-2 border-indigo-400">
               <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
               </svg>
             </div>
             <div>
               <h3 className="font-bold text-lg leading-tight">AI Assistant</h3>
-              <p className="text-indigo-200 text-xs">Recipe & Shopping Guide</p>
+              <p className="text-indigo-200 text-xs">Chatbot for Shopping Guide</p>
             </div>
           </div>
           <button
             onClick={() => setIsOpen(false)}
-            className="p-1 hover:bg-indigo-700 rounded-full transition-colors"
+            className="p-1 hover:bg-indigo-700 rounded-none-full transition-colors"
           >
             <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -131,13 +131,13 @@ const Chatbot = ({ items, onAddToCart }) => {
           {messages.map((msg, idx) => (
             <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : msg.role === 'system' ? 'justify-center' : 'justify-start'}`}>
               {msg.role === 'system' ? (
-                <div className="bg-green-100 text-green-800 text-xs px-3 py-1.5 rounded-full mt-1 mb-2 font-medium">
+                <div className="bg-green-100 text-green-800 text-xs px-3 py-1.5 rounded-none-full mt-1 mb-2 font-medium">
                   {msg.content}
                 </div>
               ) : (
-                <div className={`max-w-[80%] rounded-2xl px-4 py-2 shadow-sm prose prose-sm prose-slate text-sm leading-relaxed whitespace-pre-wrap text-justify break-words ${msg.role === 'user'
-                  ? 'bg-indigo-600 text-white rounded-tr-none prose-p:text-white prose-strong:text-white'
-                  : 'bg-white border border-slate-200 text-slate-700 rounded-tl-none prose-p:text-slate-700 prose-strong:text-indigo-600'}`}>
+                <div className={`max-w-[80%] rounded-none-none px-4 py-2 shadow-sm prose prose-sm prose-slate text-sm leading-relaxed whitespace-pre-wrap text-justify break-words ${msg.role === 'user'
+                  ? 'bg-indigo-600 text-white rounded-none-tr-none prose-p:text-white prose-strong:text-white'
+                  : 'bg-white border border-slate-200 text-slate-700 rounded-none-tl-none prose-p:text-slate-700 prose-strong:text-indigo-600'}`}>
                   <ReactMarkdown>
                     {msg.content}
                   </ReactMarkdown>
@@ -148,10 +148,10 @@ const Chatbot = ({ items, onAddToCart }) => {
 
           {isLoading && (
             <div className="flex justify-start">
-              <div className="bg-white border border-slate-200 rounded-2xl rounded-tl-none px-4 py-3 flex gap-1 shadow-sm items-center">
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                <div className="w-2 h-2 bg-indigo-400 rounded-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
+              <div className="bg-white border border-slate-200 rounded-none-none rounded-none-tl-none px-4 py-3 flex gap-1 shadow-sm items-center">
+                <div className="w-2 h-2 bg-indigo-400 rounded-none-full animate-bounce"></div>
+                <div className="w-2 h-2 bg-indigo-400 rounded-none-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                <div className="w-2 h-2 bg-indigo-400 rounded-none-full animate-bounce" style={{ animationDelay: '0.4s' }}></div>
               </div>
             </div>
           )}
@@ -160,7 +160,7 @@ const Chatbot = ({ items, onAddToCart }) => {
 
         {/* Input Area */}
         <form onSubmit={handleSubmit} className="p-3 bg-white border-t border-slate-200">
-          <div className="flex gap-2 items-end bg-slate-100 rounded-2xl px-4 py-2 border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
+          <div className="flex gap-2 items-end bg-slate-100 rounded-none-none px-4 py-2 border border-slate-200 focus-within:border-indigo-400 focus-within:ring-2 focus-within:ring-indigo-100 transition-all">
             <textarea
               ref={textareaRef}
               value={input}
@@ -181,7 +181,7 @@ const Chatbot = ({ items, onAddToCart }) => {
             <button
               type="submit"
               disabled={!input.trim() || isLoading}
-              className={`p-1.5 mb-0.5 rounded-full ${input.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-300 text-slate-500'} transition-colors shrink-0`}
+              className={`p-1.5 mb-0.5 rounded-none-full ${input.trim() ? 'bg-indigo-600 text-white hover:bg-indigo-700' : 'bg-slate-300 text-slate-500'} transition-colors shrink-0`}
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 ml-0.5 transform rotate-90" viewBox="0 0 20 20" fill="currentColor">
                 <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />

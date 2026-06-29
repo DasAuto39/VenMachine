@@ -41,7 +41,10 @@ from queries import (
     create_location,
     update_location,
     delete_location,
-    get_analytics_data
+    get_analytics_data,
+    get_categories,
+    create_category,
+    delete_category
 )
 
 app = FastAPI(title="Smart Storage API")
@@ -132,10 +135,31 @@ class LocationCreate(BaseModel):
     location_code: str
     is_active: bool = True
 
+class CategoryCreate(BaseModel):
+    name: str
+
 # Mengelola koneksi database saat server menyala/mati
 @app.on_event("startup")
 async def startup():
-    await DatabasePool.init()
+    pool = await DatabasePool.init()
+    
+    # Auto-migrate categories table
+    async with pool.acquire() as conn:
+        await conn.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            )
+        """)
+        # Seed initial categories if empty
+        val = await conn.fetchval("SELECT COUNT(*) FROM categories")
+        if val == 0:
+            await conn.execute("""
+                INSERT INTO categories (name)
+                SELECT DISTINCT category FROM items WHERE category IS NOT NULL
+                ON CONFLICT DO NOTHING
+            """)
+            
     import asyncio
     loop = asyncio.get_running_loop()
     start_mqtt(loop)
@@ -170,44 +194,44 @@ async def chat_endpoint(request: Request, req: ChatRequest):
     item_list_str = "\n".join([f"- ID: {item['id']} | Kategori: {item.get('category', 'Lainnya')} | Nama: {item['name']} | Harga: Rp{item['price']} | Stok: {item['machine_stock']}" for item in available_items])
     
     system_prompt = f"""
-Anda adalah Asisten Cerdas Vending Machine Khusus Masakan Indonesia.
-Bantu pengguna berbelanja bahan makanan yang tersedia.
+Anda adalah Asisten Cerdas Vending Machine / Smart Minimarket Drive Thru (SMD).
+Bantu pengguna menemukan dan berbelanja berbagai produk dan kebutuhan yang tersedia.
 
-STOK BAHAN:
+STOK PRODUK:
 {item_list_str}
 
 TUGAS ANDA:
 1. PERKENALAN AWAL: Jika pengguna hanya menyapa (contoh: "Halo", "Hai", "Pagi"), perkenalkan diri Anda dengan ramah sebagai asisten dan tanyakan apa yang bisa Anda bantu. JANGAN memberikan rekomendasi sebelum diminta.
-2. REKOMENDASI SPESIFIK INDONESIA: Jika pengguna meminta rekomendasi, fokuslah pada MASAKAN INDONESIA secara umum. Jika pengguna secara spesifik meminta "tradisional", barulah rekomendasikan menu tradisional. Sesuaikan dengan konteks yang diminta pengguna (contoh: makanan yang bergizi untuk anak kecil, makanan lembut untuk orang tua, masakan pedas, dll) menggunakan "STOK BAHAN" di atas.
+2. REKOMENDASI CERDAS: Jika pengguna meminta rekomendasi, berikan solusi yang relevan dengan kebutuhan mereka menggunakan "STOK PRODUK" di atas. (Contoh: jika mencari sarapan, tawarkan roti/susu; jika mencari kebutuhan mandi, tawarkan sabun; jika ingin memasak, tawarkan bahan makanan).
 3. JIKA pengguna membalas setuju/mengonfirmasi saran Anda (contoh: "oke", "ya", "tambahkan"), Anda WAJIB merespons dengan memasukkan ID barang ke dalam array `action_items` dan mengkonfirmasi bahwa barang telah ditambahkan.
 4. JIKA pengguna belum setuju/masih bertanya, `action_items` HARUS kosong [].
-5. PENTING: Dalam "message" yang Anda berikan ke pengguna, sebutkan NAMA BARANG saja dan cetak tebal (bold) menggunakan markdown (contoh: **Bayam Segar**), JANGAN PERNAH menyebutkan nomor ID (contoh: "ID 1", "ID 2"). ID barang HANYA boleh diletakkan di dalam array `action_items`.
-6. PENTING (VARIASI JAWABAN): Jangan mengulangi kalimat atau rekomendasi dari contoh di bawah ini (seperti selalu menyarankan Sayur Bening). Buatlah jawaban, gaya bahasa, sapaan, dan rekomendasi masakan yang sangat variatif, kreatif, dan natural sesuai dengan bahan yang sedang tersedia.
+5. PENTING: Dalam "message" yang Anda berikan ke pengguna, sebutkan NAMA PRODUK saja dan cetak tebal (bold) menggunakan markdown (contoh: **Sabun Mandi**), JANGAN PERNAH menyebutkan nomor ID (contoh: "ID 1", "ID 2"). ID produk HANYA boleh diletakkan di dalam array `action_items`.
+6. PENTING (VARIASI JAWABAN): Buatlah jawaban, gaya bahasa, sapaan, dan rekomendasi yang sangat variatif, kreatif, dan natural sesuai dengan produk yang sedang tersedia.
 7. Berikan output HANYA dalam JSON valid, tanpa teks lain.
-8. PENOLAKAN HALUS: JIKA pengguna meminta resep atau bahan yang TIDAK ADA di dalam STOK BAHAN, Anda HARUS meminta maaf dengan sopan dan memberi tahu bahwa bahan tersebut sedang kosong. Lalu, berikan alternatif resep lain menggunakan HANYA bahan yang sedang TERSEDIA.
-9. BATASAN TOPIK: Anda adalah asisten Vending Machine. JIKA pengguna bertanya hal-hal di luar konteks makanan, bahan masakan, atau cara berbelanja di FreshMart, tolak dengan sopan dan kembalikan percakapan ke topik berbelanja.
-10. KUANTITAS: JIKA pengguna secara spesifik meminta jumlah barang lebih dari satu (contoh: minta 2 bayam dengan ID 1), Anda harus memasukkan ID tersebut berkali-kali ke dalam array `action_items` sesuai jumlah yang diminta (contoh: `[1, 1]`).
-11. ANGGARAN: Anda memiliki informasi harga. JIKA pengguna menyebutkan batas anggaran (budget), berikan rekomendasi kombinasi bahan masakan yang total harganya TIDAK MELEBIHI anggaran tersebut.
-12. PERSETUJUAN SEBAGIAN: Saat pengguna menyetujui rekomendasi, baca baik-baik apakah mereka menyetujui semua rekomendasi atau hanya sebagian. HANYA masukkan ID barang ke `action_items` yang secara eksplisit disetujui oleh pengguna.
-13. PROFIL USIA & DIET: Perhatikan kata kunci usia (anak, bayi, lansia) atau pantangan (diet, alergi). Jangan merekomendasikan masakan pedas/keras untuk balita atau lansia. Utamakan sayur dan masakan rebusan/kukus untuk permintaan diet sehat.
-14. MASAKAN DAERAH (REGIONAL): JIKA pengguna meminta masakan khas daerah tertentu (Padang, Sunda, Jawa, Bali, dll), gunakan pengetahuan kuliner nusantara Anda untuk meracik menu dari bahan yang TERSEDIA.
-15. PROFIL RASA & WAKTU MAKAN: JIKA pengguna meminta rasa tertentu (Pedas, Gurih, Segar) atau waktu (Sarapan, Makan Malam), sesuaikan resepnya. (Contoh: Kuah segar sangat cocok untuk siang hari).
-16. CROSS-SELLING (PENAWARAN PELENGKAP): Jika pengguna telah menyetujui untuk membeli suatu barang, cobalah tawarkan SATU bahan pelengkap lain yang ada di STOK BAHAN untuk menyempurnakan masakannya secara natural, jika tidak ada bahan pelengkap yang cocok, jangan memaksakan.
-17. KEPRIBADIAN (TONE): Gunakan sapaan yang hangat, sopan, dan ramah selayaknya asisten belanja yang ceria. Jangan membalas dengan bahasa yang terlalu kaku atau teknis.
+8. PENOLAKAN HALUS: JIKA pengguna meminta produk yang TIDAK ADA di dalam STOK PRODUK, Anda HARUS meminta maaf dengan sopan dan memberi tahu bahwa produk tersebut sedang kosong. Lalu, berikan alternatif produk lain HANYA dari produk yang sedang TERSEDIA.
+9. BATASAN TOPIK: Anda adalah asisten Vending Machine. JIKA pengguna bertanya hal-hal di luar konteks berbelanja, produk, atau layanan SMD, tolak dengan sopan dan kembalikan percakapan ke topik berbelanja.
+10. KUANTITAS: JIKA pengguna secara spesifik meminta jumlah barang lebih dari satu (contoh: minta 2 sabun dengan ID 1), Anda harus memasukkan ID tersebut berkali-kali ke dalam array `action_items` sesuai jumlah yang diminta (contoh: `[1, 1]`).
+11. ANGGARAN: Anda memiliki informasi harga. JIKA pengguna menyebutkan batas anggaran (budget), berikan rekomendasi kombinasi produk yang total harganya TIDAK MELEBIHI anggaran tersebut.
+12. PERSETUJUAN SEBAGIAN: Saat pengguna menyetujui rekomendasi, baca baik-baik apakah mereka menyetujui semua rekomendasi atau hanya sebagian. HANYA masukkan ID produk ke `action_items` yang secara eksplisit disetujui oleh pengguna.
+13. PERSONALISASI: Perhatikan kata kunci khusus dari pengguna (misal: produk untuk anak bayi, diet, atau hadiah). Jangan merekomendasikan produk yang tidak sesuai dengan profil atau batasan yang disebutkan.
+14. CROSS-SELLING (PENAWARAN PELENGKAP): Jika pengguna telah menyetujui untuk membeli suatu barang, cobalah tawarkan SATU produk pelengkap lain yang ada di STOK PRODUK untuk melengkapi pesanannya secara natural (contoh: jika membeli sikat gigi, tawarkan pasta gigi), jika tidak ada pelengkap yang cocok, jangan memaksakan.
+15. EDUKASI & KOMPARASI PRODUK: Gunakan pengetahuan umum/database internal Anda untuk membandingkan bahan (ingredients) antar produk, kandungan nutrisi, atau memberikan peringatan alergi jika pengguna meminta. Jelaskan dengan bahasa yang mudah dimengerti.
+16. TIPS PENGGUNAAN & PENYIMPANAN: Berikan tips singkat yang berguna mengenai cara memakai, mengolah, atau menyimpan produk yang ditanyakan pengguna.
+17. KEPRIBADIAN (TONE): Gunakan sapaan yang hangat, sopan, dan ramah selayaknya pramuniaga supermarket yang ceria. Jangan membalas dengan bahasa yang terlalu kaku atau teknis.
 
 CONTOH STRUKTUR JSON (HANYA CONTOH FORMAT, BUAT KONTEN ANDA SENDIRI):
 {{
-  "message": "Halo! Saya asisten mesin otomatis Anda. Ada yang bisa saya bantu hari ini? Anda bisa menanyakan rekomendasi masakan Indonesia atau Menu Makanan yang anda Inginkan .",
+  "message": "Halo! Saya asisten Smart Minimarket Anda. Ada yang bisa saya bantu hari ini? Anda bisa menanyakan rekomendasi kebutuhan harian atau produk lainnya.",
   "action_items": []
 }}
 CONTOH JSON JIKA MENAWARKAN:
 {{
-  "message": "Untuk masakan berkuah yang segar dan sehat untuk si kecil, saya sarankan membuat Sayur Bening dengan **Bayam Segar** dan **Wortel Premium**. Mau saya tambahkan ke keranjang?",
+  "message": "Untuk kebutuhan sarapan pagi, kami memiliki **Roti Tawar** dan **Susu Cokelat** segar. Mau saya tambahkan ke keranjang?",
   "action_items": []
 }}
 CONTOH JSON JIKA USER MENJAWAB SETUJU:
 {{
-  "message": "Baik, **Bayam Segar** dan **Wortel Premium** telah ditambahkan ke keranjang belanja Anda.",
+  "message": "Baik, **Roti Tawar** dan **Susu Cokelat** telah ditambahkan ke keranjang belanja Anda.",
   "action_items": [1, 2]
 }}
 """
@@ -249,8 +273,8 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
     
     for attempt in range(max_retries):
         try:
-            # Menggunakan model gemini-1.5-flash yang sangat cepat dan stabil
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={gemini_api_key}"
+            # Menggunakan model gemini-2.5-flash yang stabil
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={gemini_api_key}"
             
             payload = {
                 "system_instruction": {
@@ -259,8 +283,8 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
                 "contents": contents_payload,
                 "generationConfig": {
                     "temperature": 0.6,
-                    "maxOutputTokens": 150, # Membatasi output agar AI merespons dengan cepat dan padat
-                    "response_mime_type": "application/json" # Memaksa Gemini untuk mengembalikan format JSON yang valid
+                    #"maxOutputTokens": 600, # Dilonggarkan agar JSON tidak terpotong di tengah jalan
+                    "response_mime_type": "application/json" # Mengembalikan perintah format JSON
                 }
             }
             
@@ -275,8 +299,22 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
             if not raw_text:
                 raise json.JSONDecodeError("Empty response from Gemini", "", 0)
                 
-            parsed = json.loads(raw_text)
-            
+            # Bersihkan markdown backticks             
+            clean_text = raw_text
+            if clean_text.startswith("```json"):
+                clean_text = clean_text[7:]
+            elif clean_text.startswith("```"):
+                clean_text = clean_text[3:]
+            if clean_text.endswith("```"):
+                clean_text = clean_text[:-3]
+            clean_text = clean_text.strip()
+                
+            try:
+                parsed = json.loads(clean_text)
+            except json.JSONDecodeError as e:
+                print(f"Failed to parse JSON. Raw text from Gemini: {raw_text}")
+                raise e
+                
             # Fallback safeguard jika format dari AI tidak ada
             if "message" not in parsed:
                 parsed["message"] = "Terjadi kesalahan format dari AI."
@@ -299,7 +337,6 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
                 "message": "Maaf, asisten cerdas sedang sibuk melayani banyak antrean. Anda bisa langsung menekan tombol 'Tambah' pada etalase produk di bawah ya!",
                 "action_items": []
             }
-        }
 
 
 # Endpoint 1: Mengambil katalog barang untuk UI React
@@ -642,9 +679,25 @@ async def delete_post_endpoint(post_id: int, current_user: dict = Depends(get_ad
     """Delete a post"""
     return await delete_post(post_id)
 
-# ===== ADMIN ANALYTICS =====
-
+# Endpoint: Mengambil Analytics Data
 @app.get("/api/admin/analytics")
-async def admin_analytics_endpoint(current_user: dict = Depends(get_admin_user)):
-    """Get aggregated analytics data"""
-    return await get_analytics_data()
+async def get_analytics(month: Optional[int] = None, year: Optional[int] = None, current_user: dict = Depends(get_admin_user)):
+    """Mendapatkan data analitik (total sales, item terjual, dll)"""
+    return await get_analytics_data(month, year)
+
+# ===== KATEGORI ENDPOINTS =====
+
+@app.get("/api/categories")
+async def api_get_categories():
+    """Mendapatkan semua kategori"""
+    return await get_categories()
+
+@app.post("/api/admin/categories")
+async def api_create_category(req: CategoryCreate, current_user: dict = Depends(get_admin_user)):
+    """Membuat kategori baru (Admin Only)"""
+    return await create_category(req.name)
+
+@app.delete("/api/admin/categories/{category_id}")
+async def api_delete_category(category_id: int, current_user: dict = Depends(get_admin_user)):
+    """Menghapus kategori (Admin Only)"""
+    return await delete_category(category_id)

@@ -27,6 +27,8 @@ share/python-wheels/
 MANIFEST
 
 # Project
+database_schema.md
+laporan_individu_software.txt
 laporan_venmachine.txt
 .env
 frontend/node_modules/

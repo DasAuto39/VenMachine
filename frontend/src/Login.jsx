@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react';
+import smdLogo from './images/smd.jpeg';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -153,18 +154,18 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50 text-slate-800 font-sans selection:bg-emerald-200 relative overflow-hidden flex items-center justify-center">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-teal-50 to-teal-50 text-slate-800 font-sans selection:bg-teal-200 relative overflow-hidden flex items-center justify-center">
 
       {/* Decorative Background Elements */}
       <div className="fixed inset-0 pointer-events-none z-0">
         {/* Large floating blob - top right */}
-        <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-emerald-200 rounded-full blur-3xl opacity-20 animate-float"></div>
+        <div className="absolute top-0 right-0 -mr-32 -mt-32 w-96 h-96 bg-teal-200 rounded-none-full blur-3xl opacity-20 animate-float"></div>
 
         {/* Medium blob - bottom left */}
-        <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-80 h-80 bg-teal-200 rounded-full blur-3xl opacity-15 animate-float-reverse"></div>
+        <div className="absolute bottom-0 left-0 -ml-40 -mb-40 w-80 h-80 bg-teal-200 rounded-none-full blur-3xl opacity-15 animate-float-reverse"></div>
 
         {/* Small blob - center */}
-        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-emerald-300 rounded-full blur-3xl opacity-10 animate-float" style={{ animationDelay: '1s' }}></div>
+        <div className="absolute top-1/3 right-1/4 w-64 h-64 bg-teal-300 rounded-none-full blur-3xl opacity-10 animate-float" style={{ animationDelay: '1s' }}></div>
 
         {/* Grid pattern overlay */}
         <div className="absolute inset-0 opacity-[0.02] bg-[linear-gradient(to_right,#000_1px,transparent_1px),linear-gradient(to_bottom,#000_1px,transparent_1px)] bg-[size:50px_50px]"></div>
@@ -176,18 +177,23 @@ export default function Login() {
 
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg shadow-emerald-500/30 text-white text-2xl font-black mx-auto mb-4">
-              F
+            <div className="h-20 w-auto bg-white p-2 rounded-2xl shadow-sm mx-auto mb-4 shrink-0 border border-slate-100 flex items-center justify-center">
+              <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain rounded-xl" />
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-900 mb-2">
-              FRESH<span className="text-emerald-500">MART</span>
-            </h1>
+            <div className="flex flex-col items-center leading-none mb-2">
+              <span className="text-2xl font-black tracking-tight text-teal-600">
+                Smart Minimarket
+              </span>
+              <span className="text-xl font-black text-slate-900 mt-1">
+                Drive Thru
+              </span>
+            </div>
             <p className="text-sm text-slate-500 font-semibold">Smart Vending System</p>
           </div>
 
           {/* Error Message */}
           {error && (
-            <div className="bg-rose-100/80 border border-rose-300 text-rose-700 px-4 py-3 rounded-xl mb-6 font-medium text-sm">
+            <div className="bg-rose-100/80 border border-rose-300 text-rose-700 px-4 py-3 rounded-none-none mb-6 font-medium text-sm">
               <p className="flex items-center gap-2">
                 <AlertTriangle size={18} /> {error}
               </p>
@@ -204,7 +210,7 @@ export default function Login() {
                   name="username"
                   value={loginForm.username}
                   onChange={handleLoginChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors"
                   placeholder="Masukkan username"
                   disabled={loading}
                   autoComplete="username"
@@ -218,7 +224,7 @@ export default function Login() {
                   name="password"
                   value={loginForm.password}
                   onChange={handleLoginChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors"
                   placeholder="Masukkan password"
                   disabled={loading}
                   autoComplete="current-password"
@@ -228,7 +234,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-emerald-500/30 disabled:shadow-none active:scale-[0.98] text-base"
+                className="w-full bg-gradient-to-r from-teal-500 to-teal-600 hover:from-teal-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-none-none transition-all shadow-lg shadow-teal-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
                 <div className="flex items-center justify-center gap-2">
                   {loading ? <><Loader2 size={18} className="animate-spin" /> Loading...</> : 'Login'}
@@ -244,7 +250,7 @@ export default function Login() {
                     setError('');
                     setLoginForm({ username: '', password: '' });
                   }}
-                  className="text-emerald-600 font-bold hover:text-emerald-700 underline"
+                  className="text-teal-600 font-bold hover:text-teal-700 underline"
                 >
                   Daftar di sini
                 </button>
@@ -260,7 +266,7 @@ export default function Login() {
                   name="username"
                   value={registerForm.username}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="3-30 karakter (alphanumeric)"
                   disabled={loading}
                   autoComplete="username"
@@ -274,7 +280,7 @@ export default function Login() {
                   name="email"
                   value={registerForm.email}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="email@example.com"
                   disabled={loading}
                   autoComplete="email"
@@ -288,7 +294,7 @@ export default function Login() {
                   name="full_name"
                   value={registerForm.full_name}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="Nama lengkap Anda"
                   disabled={loading}
                   autoComplete="name"
@@ -302,7 +308,7 @@ export default function Login() {
                   name="phone"
                   value={registerForm.phone}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="08xx xxxx xxxx"
                   disabled={loading}
                   autoComplete="tel"
@@ -316,7 +322,7 @@ export default function Login() {
                   name="password"
                   value={registerForm.password}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="Minimal 6 karakter"
                   disabled={loading}
                   autoComplete="new-password"
@@ -330,7 +336,7 @@ export default function Login() {
                   name="confirmPassword"
                   value={registerForm.confirmPassword}
                   onChange={handleRegisterChange}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-none-none focus:outline-none focus:ring-2 focus:ring-teal-500 focus:border-transparent bg-slate-50/50 hover:bg-slate-50 transition-colors text-sm"
                   placeholder="Ulangi password"
                   disabled={loading}
                   autoComplete="new-password"
@@ -340,7 +346,7 @@ export default function Login() {
               <button
                 type="submit"
                 disabled={loading}
-                className="w-full bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-xl transition-all shadow-lg shadow-green-500/30 disabled:shadow-none active:scale-[0.98] text-base"
+                className="w-full bg-gradient-to-r from-green-500 to-teal-600 hover:from-green-600 hover:to-teal-700 disabled:from-slate-300 disabled:to-slate-300 text-white font-black py-3 px-4 rounded-none-none transition-all shadow-lg shadow-green-500/30 disabled:shadow-none active:scale-[0.98] text-base"
               >
                 <div className="flex items-center justify-center gap-2">
                   {loading ? <><Loader2 size={18} className="animate-spin" /> Loading...</> : <><CheckCircle2 size={18} /> Daftar</>}
@@ -363,7 +369,7 @@ export default function Login() {
                       phone: ''
                     });
                   }}
-                  className="text-emerald-600 font-bold hover:text-emerald-700 underline"
+                  className="text-teal-600 font-bold hover:text-teal-700 underline"
                 >
                   Login di sini
                 </button>
