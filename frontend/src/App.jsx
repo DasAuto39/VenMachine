@@ -672,20 +672,20 @@ function App({ onGoToAdmin, onGoToLogin }) {
           {/* Gradient accent line */}
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-teal-400 via-teal-400 to-teal-500" />
 
-          <div className="w-full h-full backdrop-blur-xl bg-teal-50/95 border-b border-teal-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{ minHeight: '62px' }}>
+          <div className="w-full h-full backdrop-blur-xl bg-teal-50/95 border-b border-teal-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-2 sm:px-4 md:px-8 flex items-center justify-between gap-2" style={{ minHeight: '62px' }}>
 
             {/* LEFT: logo + gate */}
-            <div className="flex items-center gap-4 md:gap-6">
+            <div className="flex items-center gap-2 sm:gap-4 md:gap-6 shrink-0">
               {/* Logo */}
               <div className="flex items-center gap-2.5 shrink-0">
-                <div className="h-10 w-auto bg-white p-1 rounded-xl shadow-sm shrink-0 border border-slate-100 flex items-center justify-center">
-                  <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain rounded-lg" />
+                <div className="h-10 w-auto bg-white p-1 shadow-sm shrink-0 border border-slate-100 flex items-center justify-center">
+                  <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain" />
                 </div>
                 <div className="hidden sm:flex flex-col leading-none justify-center">
-                  <span className="text-sm font-black tracking-tight text-teal-600">
+                  <span className="text-sm font-black tracking-[0.15em] text-teal-800 uppercase">
                     Smart Minimarket
                   </span>
-                  <span className="text-[11px] font-bold text-slate-900">
+                  <span className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase mt-0.5">
                     Drive Thru
                   </span>
                 </div>
@@ -758,8 +758,12 @@ function App({ onGoToAdmin, onGoToLogin }) {
                   onClick={() => navigate('/profile')}
                   className="shrink-0 snap-start flex items-center gap-2 px-4 py-2 rounded-none-none text-sm font-bold bg-white text-teal-800 border border-teal-100 hover:bg-teal-50 hover:border-teal-300 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 whitespace-nowrap"
                 >
-                  <span className="w-5 h-5 rounded-none-full bg-gradient-to-br from-teal-400 to-teal-500 text-white flex items-center justify-center text-[10px]">
-                    {(user?.full_name?.charAt(0) || user?.username?.charAt(0))?.toUpperCase()}
+                  <span className="w-5 h-5 rounded-none-full bg-gradient-to-br from-teal-400 to-teal-500 text-white flex items-center justify-center text-[10px] overflow-hidden">
+                    {user?.profile_picture ? (
+                      <img src={`${import.meta.env.VITE_API_BASE_URL}${user.profile_picture}`} alt="PP" className="w-full h-full object-cover" />
+                    ) : (
+                      (user?.full_name?.charAt(0) || user?.username?.charAt(0))?.toUpperCase()
+                    )}
                   </span>
                   Halo, {user?.full_name?.split(' ')[0] || user?.username}
                 </button>
@@ -852,7 +856,7 @@ function App({ onGoToAdmin, onGoToLogin }) {
                       Anda terhubung ke <span className="text-teal-700">{currentGate.replace('gate_', 'Gate ')}</span> — pastikan ini sudah benar!
                     </p>
                     <p className="text-sm text-amber-700/80 font-medium leading-relaxed">
-                      Periksa nomor atau label gate di mesin vending terdekat. Salah gate dapat mengakibatkan barang keluar di tempat yang berbeda.
+                      Periksa nomor atau label gate di mesin vending terdekat. Salah gate dapat mengakibatkan barang keluar di tempat yang berbeda, <span className="text-rose-600 font-bold">dan bukan tanggung jawab kami jika barang tidak ditemukan.</span>
                     </p>
                   </>
                 )}

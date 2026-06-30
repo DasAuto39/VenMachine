@@ -15,13 +15,17 @@ import {
   ChevronDown,
   ChevronUp,
   ArrowLeft,
-  Tag
+  Tag,
+  Edit3,
+  Save,
+  X
 } from 'lucide-react';
 
 function Admin() {
   const navigate = useNavigate();
   const [items, setItems] = useState([]);
   const [transactions, setTransactions] = useState([]);
+  const [txSummary, setTxSummary] = useState(null);
   const [analytics, setAnalytics] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -50,6 +54,9 @@ function Admin() {
   const [posts, setPosts] = useState([]);
   const [showPostForm, setShowPostForm] = useState(false);
   const [editingPostId, setEditingPostId] = useState(null);
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [editingCategoryId, setEditingCategoryId] = useState(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
   const [postFormData, setPostFormData] = useState({
     title: '',
     content: '',
@@ -62,7 +69,6 @@ function Admin() {
 
   // Categories state
   const [categories, setCategories] = useState([]);
-  const [newCategoryName, setNewCategoryName] = useState('');
 
   // Sorting state
   const [productSortField, setProductSortField] = useState('location_id');
@@ -170,6 +176,30 @@ function Admin() {
     }
   };
 
+  const handleUpdateCategory = async (id) => {
+    if (!editingCategoryName.trim()) return;
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/categories/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        },
+        body: JSON.stringify({ name: editingCategoryName.trim() })
+      });
+      if (res.ok) {
+        setEditingCategoryId(null);
+        setEditingCategoryName('');
+        fetchCategories();
+      } else {
+        const err = await res.json();
+        alert(err.detail || 'Gagal mengubah kategori');
+      }
+    } catch (err) {
+      alert('Terjadi kesalahan jaringan.');
+    }
+  };
+
   const handleDeleteCategory = async (id) => {
     if (!window.confirm("Yakin ingin menghapus kategori ini? Pastikan tidak ada produk yang menggunakan kategori ini.")) return;
     try {
@@ -247,8 +277,16 @@ function Admin() {
   const fetchTransactions = async () => {
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/transactions`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
-      const data = await res.json();
-      setTransactions(data);
+      if (res.ok) {
+        const data = await res.json();
+        setTransactions(data);
+      }
+
+      const summaryRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/admin/transactions/summary`, { headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` } });
+      if (summaryRes.ok) {
+        const summaryData = await summaryRes.json();
+        setTxSummary(summaryData);
+      }
     } catch (err) {
       console.error("Error fetching transactions:", err);
     }
@@ -477,7 +515,7 @@ function Admin() {
     }
     try {
       let finalImageUrl = postFormData.image_url || null;
-      
+
       // === Logika upload gambar post ===
       if (postImageFile) {
         const formDataUpload = new FormData();
@@ -488,7 +526,7 @@ function Admin() {
           headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
           body: formDataUpload
         });
-        
+
         if (uploadRes.ok) {
           const uploadData = await uploadRes.json();
           finalImageUrl = uploadData.url;
@@ -587,7 +625,7 @@ function Admin() {
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-none-none flex items-center justify-center shadow-md shadow-indigo-500/25 text-white text-sm font-black">
               A
             </div>
-            <h1 className="text-lg font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Admin Panel</h1>
+            <h1 className="text-lg font-black bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600">Dashboard Admin</h1>
           </div>
           <div className="flex items-center gap-3">
             <button
@@ -645,7 +683,7 @@ function Admin() {
               : 'bg-white text-slate-500 hover:bg-teal-50 hover:text-teal-600 border border-slate-200 hover:border-teal-200'
               }`}
           >
-            <Tag className="w-4 h-4" /> Kategori
+            <Tag className="w-4 h-4" /> Manajemen Kategori
           </button>
           <button
             onClick={() => setActiveTab('analytics')}
@@ -844,11 +882,10 @@ function Admin() {
                       <button
                         type="submit"
                         disabled={isLocationOccupied}
-                        className={`flex-1 text-white py-3 rounded-none-full font-bold transition-all duration-300 ${
-                          isLocationOccupied 
-                            ? 'bg-slate-300 cursor-not-allowed' 
-                            : 'bg-gradient-to-r from-indigo-500 to-purple-500 hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5'
-                        }`}
+                        className={`flex-1 text-white py-3 rounded-none-full font-bold transition-all duration-300 ${isLocationOccupied
+                          ? 'bg-slate-300 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-indigo-500 to-purple-500 hover:shadow-lg hover:shadow-indigo-500/30 transform hover:-translate-y-0.5'
+                          }`}
                       >
                         {editingId ? 'Simpan Perubahan' : 'Tambahkan'}
                       </button>
@@ -872,13 +909,13 @@ function Admin() {
                 <table className="w-full">
                   <thead>
                     <tr className="bg-slate-50/50 border-b border-slate-100">
-                      <th onClick={() => handleProductSort('location_id')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Lokasi <SortIcon field="location_id" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('name')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Nama Produk <SortIcon field="name" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('sku')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">SKU <SortIcon field="sku" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('category')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Kategori <SortIcon field="category" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('price')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Harga <SortIcon field="price" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('machine_stock')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100 whitespace-nowrap">Stok Mesin <SortIcon field="machine_stock" currentField={productSortField} order={productSortOrder}/></th>
-                      <th onClick={() => handleProductSort('warehouse_stock')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100 whitespace-nowrap">Stok Gudang <SortIcon field="warehouse_stock" currentField={productSortField} order={productSortOrder}/></th>
+                      <th onClick={() => handleProductSort('location_id')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Lokasi <SortIcon field="location_id" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('name')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Nama Produk <SortIcon field="name" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('sku')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">SKU <SortIcon field="sku" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('category')} className="px-6 py-4 text-left font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Kategori <SortIcon field="category" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('price')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100">Harga <SortIcon field="price" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('machine_stock')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100 whitespace-nowrap">Stok Mesin <SortIcon field="machine_stock" currentField={productSortField} order={productSortOrder} /></th>
+                      <th onClick={() => handleProductSort('warehouse_stock')} className="px-6 py-4 text-right font-bold text-slate-700 cursor-pointer hover:bg-slate-100 whitespace-nowrap">Stok Gudang <SortIcon field="warehouse_stock" currentField={productSortField} order={productSortOrder} /></th>
                       <th className="px-6 py-4 text-center font-bold text-slate-700">Rak</th>
                       <th className="px-6 py-4 text-center font-bold text-slate-700">Aksi</th>
                     </tr>
@@ -943,31 +980,31 @@ function Admin() {
                               </button>
                             )}
                             {item.id ? (
+                              <button
+                                onClick={() => handleDelete(item.id, null)}
+                                className="p-2.5 bg-rose-50 text-rose-600 rounded-none-none hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
+                                title="Kosongkan Rak (Hapus Barang)"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            ) : (
+                              item.location_id === maxLocId ? (
                                 <button
-                                  onClick={() => handleDelete(item.id, null)}
+                                  onClick={() => handleDelete(null, item.location_id)}
                                   className="p-2.5 bg-rose-50 text-rose-600 rounded-none-none hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
-                                  title="Kosongkan Rak (Hapus Barang)"
+                                  title="Hapus Rak Permanen"
                                 >
                                   <Trash2 className="w-4 h-4" />
                                 </button>
-                            ) : (
-                                item.location_id === maxLocId ? (
-                                  <button
-                                    onClick={() => handleDelete(null, item.location_id)}
-                                    className="p-2.5 bg-rose-50 text-rose-600 rounded-none-none hover:bg-rose-100 hover:text-rose-700 transition-all transform hover:-translate-y-0.5"
-                                    title="Hapus Rak Permanen"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                ) : (
-                                  <button
-                                    disabled
-                                    className="p-2.5 bg-slate-100 text-slate-300 rounded-none-none cursor-not-allowed"
-                                    title="Rak kosong hanya bisa dihapus dari urutan paling akhir"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
-                                )
+                              ) : (
+                                <button
+                                  disabled
+                                  className="p-2.5 bg-slate-100 text-slate-300 rounded-none-none cursor-not-allowed"
+                                  title="Rak kosong hanya bisa dihapus dari urutan paling akhir"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              )
                             )}
                           </div>
                         </td>
@@ -1115,23 +1152,25 @@ function Admin() {
               <div className="bg-white rounded-none-none p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(59,130,246,0.1)] transition-all">
                 <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-blue-100 to-cyan-100 rounded-none-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
                 <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Transaksi</p>
-                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 relative z-10">{transactions.length}</p>
+                <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-blue-600 to-cyan-600 relative z-10">{txSummary ? txSummary.total_transactions : transactions.length}</p>
               </div>
               <div className="bg-white rounded-none-none p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] transition-all">
                 <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-teal-100 to-teal-100 rounded-none-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
                 <p className="text-slate-500 font-semibold mb-2 relative z-10">Pembayaran Sukses</p>
                 <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-teal-500 to-teal-500 relative z-10">
-                  {transactions.filter(tx => tx.payment_status === 'PAID').length}
+                  {txSummary ? txSummary.total_paid : transactions.filter(tx => tx.payment_status === 'PAID').length}
                 </p>
               </div>
               <div className="bg-white rounded-none-none p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group hover:shadow-[0_8px_30px_rgb(245,158,11,0.1)] transition-all">
                 <div className="absolute -right-6 -top-6 w-24 h-24 bg-gradient-to-br from-amber-100 to-orange-100 rounded-none-full opacity-50 group-hover:scale-150 transition-transform duration-500"></div>
                 <p className="text-slate-500 font-semibold mb-2 relative z-10">Total Pendapatan</p>
                 <p className="text-4xl font-black bg-clip-text text-transparent bg-gradient-to-r from-amber-500 to-orange-500 relative z-10">
-                  Rp {transactions
-                    .filter(tx => tx.payment_status === 'PAID')
-                    .reduce((sum, tx) => sum + (tx.total_amount || 0), 0)
-                    .toLocaleString('id-ID')}
+                  Rp {txSummary
+                    ? Number(txSummary.total_revenue).toLocaleString('id-ID')
+                    : transactions
+                      .filter(tx => tx.payment_status === 'PAID')
+                      .reduce((sum, tx) => sum + (tx.total_amount || 0), 0)
+                      .toLocaleString('id-ID')}
                 </p>
               </div>
             </div>
@@ -1322,7 +1361,7 @@ function Admin() {
               <Tag className="w-6 h-6 text-teal-500" />
               Manajemen Kategori
             </h2>
-            
+
             <form onSubmit={handleAddCategory} className="flex gap-4 mb-8">
               <input
                 type="text"
@@ -1331,7 +1370,7 @@ function Admin() {
                 placeholder="Nama kategori baru..."
                 className="flex-1 px-4 py-3 bg-slate-50 border border-slate-200 rounded-none-none focus:ring-2 focus:ring-teal-500 focus:bg-white focus:border-teal-300 outline-none transition-all shadow-sm"
               />
-              <button 
+              <button
                 type="submit"
                 className="px-6 py-3 bg-teal-500 text-white font-bold rounded-none-none hover:bg-teal-600 transition-all shadow-md shadow-teal-500/20 flex items-center gap-2"
               >
@@ -1344,9 +1383,28 @@ function Admin() {
               {categories.map((cat) => {
                 const catItems = items.filter(item => item.category === cat.name);
                 return (
-                  <div key={cat.id} className="bg-white border border-slate-200 rounded-none-none p-4 flex justify-between items-center shadow-sm hover:shadow-md transition-all group">
-                    <div className="flex-1 flex flex-col items-start text-left">
-                      <span className="font-bold text-slate-700 block mb-2">{cat.name}</span>
+                  <div key={cat.id} className="bg-white border border-slate-100 rounded-none-none p-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] flex justify-between items-start group hover:border-slate-200 transition-all">
+                    <div className="flex-1">
+                      {editingCategoryId === cat.id ? (
+                        <div className="flex items-center gap-2 mb-2">
+                          <input
+                            type="text"
+                            value={editingCategoryName}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            className="px-2 py-1 border border-slate-300 rounded text-sm w-full outline-none focus:border-indigo-500"
+                            autoFocus
+                          />
+                          <button onClick={() => handleUpdateCategory(cat.id)} className="text-green-600 hover:bg-green-50 p-1 rounded">
+                            <Save className="w-4 h-4" />
+                          </button>
+                          <button onClick={() => setEditingCategoryId(null)} className="text-slate-400 hover:bg-slate-100 p-1 rounded">
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <span className="font-bold text-slate-700 block mb-2">{cat.name}</span>
+                      )}
+
                       {catItems.length > 0 ? (
                         <ul className="flex flex-col gap-1.5 w-full">
                           {catItems.map(i => (
@@ -1359,12 +1417,25 @@ function Admin() {
                         <p className="text-xs text-slate-400 italic">Belum ada barang</p>
                       )}
                     </div>
-                    <button 
-                      onClick={() => handleDeleteCategory(cat.id)}
-                      className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-none-none transition-all opacity-0 group-hover:opacity-100 shrink-0 ml-4"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center ml-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button
+                        onClick={() => {
+                          setEditingCategoryId(cat.id);
+                          setEditingCategoryName(cat.name);
+                        }}
+                        className="p-2 text-indigo-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-none-none transition-all shrink-0"
+                        title="Edit Kategori"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteCategory(cat.id)}
+                        className="p-2 text-rose-400 hover:text-rose-600 hover:bg-rose-50 rounded-none-none transition-all shrink-0"
+                        title="Hapus Kategori"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 );
               })}
@@ -1382,8 +1453,8 @@ function Admin() {
             <div className="flex justify-between items-center bg-white p-6 rounded-none-none border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
               <h2 className="text-xl font-bold text-slate-800">Filter Analitik</h2>
               <div className="flex gap-4">
-                <select 
-                  value={analyticsMonth} 
+                <select
+                  value={analyticsMonth}
                   onChange={(e) => setAnalyticsMonth(Number(e.target.value))}
                   className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-none-none focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none font-bold text-slate-700 shadow-sm"
                 >
@@ -1391,8 +1462,8 @@ function Admin() {
                     <option key={m} value={m}>{new Date(2000, m - 1).toLocaleString('id-ID', { month: 'long' })}</option>
                   ))}
                 </select>
-                <select 
-                  value={analyticsYear} 
+                <select
+                  value={analyticsYear}
                   onChange={(e) => setAnalyticsYear(Number(e.target.value))}
                   className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-none-none focus:ring-2 focus:ring-orange-500 focus:bg-white outline-none font-bold text-slate-700 shadow-sm"
                 >
@@ -1402,7 +1473,7 @@ function Admin() {
                 </select>
               </div>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Summary */}
               <div className="bg-white rounded-none-none p-6 border border-slate-100 shadow-[0_8px_30px_rgb(0,0,0,0.04)] relative overflow-hidden group">
@@ -1428,12 +1499,12 @@ function Admin() {
                 <div className="h-56 flex items-end justify-between gap-2 px-2 pb-6 border-b border-slate-100 relative">
                   {(() => {
                     const maxSales = analytics.sales_over_time?.length > 0 ? Math.max(...analytics.sales_over_time.map(d => parseFloat(d.daily_sales))) : 0;
-                    
+
                     // Hitung jumlah minggu di bulan yang dipilih
                     const daysInMonth = new Date(analyticsYear, analyticsMonth, 0).getDate();
                     const numberOfWeeks = daysInMonth === 28 ? 4 : 5;
                     const weeksArray = Array.from({ length: numberOfWeeks }, (_, i) => i + 1);
-                    
+
                     return weeksArray.map((weekNum) => {
                       const dayData = analytics.sales_over_time?.find(d => d.week_no === weekNum) || { week_no: weekNum, daily_sales: 0 };
                       const height = maxSales > 0 ? (parseFloat(dayData.daily_sales) / maxSales) * 100 : 0;
@@ -1464,8 +1535,8 @@ function Admin() {
                 <div className="flex justify-between items-center mb-6">
                   <h3 className="text-lg font-bold text-slate-800">Penjualan Bulan Ini</h3>
                   <div className="flex gap-1 bg-slate-50 p-1 rounded-none-none border border-slate-100 text-xs">
-                    <button onClick={() => handleAnalyticsSort('name')} className={`px-3 py-1.5 rounded-none-none font-bold transition-all ${analyticsSortField === 'name' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>Nama <SortIcon field="name" currentField={analyticsSortField} order={analyticsSortOrder}/></button>
-                    <button onClick={() => handleAnalyticsSort('total_sold')} className={`px-3 py-1.5 rounded-none-none font-bold transition-all ${analyticsSortField === 'total_sold' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>Terjual <SortIcon field="total_sold" currentField={analyticsSortField} order={analyticsSortOrder}/></button>
+                    <button onClick={() => handleAnalyticsSort('name')} className={`px-3 py-1.5 rounded-none-none font-bold transition-all ${analyticsSortField === 'name' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>Nama <SortIcon field="name" currentField={analyticsSortField} order={analyticsSortOrder} /></button>
+                    <button onClick={() => handleAnalyticsSort('total_sold')} className={`px-3 py-1.5 rounded-none-none font-bold transition-all ${analyticsSortField === 'total_sold' ? 'bg-white shadow-sm text-slate-800' : 'text-slate-500 hover:bg-slate-100'}`}>Terjual <SortIcon field="total_sold" currentField={analyticsSortField} order={analyticsSortOrder} /></button>
                   </div>
                 </div>
                 <div className="space-y-4 max-h-96 overflow-y-auto pr-2 custom-scrollbar">

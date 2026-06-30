@@ -138,6 +138,8 @@ export default function Login() {
           username: data.username,
           email: data.email,
           full_name: data.full_name,
+          phone: data.phone,
+          profile_picture: data.profile_picture,
           role: data.role
         };
         localStorage.setItem('user', JSON.stringify(user));
@@ -177,18 +179,17 @@ export default function Login() {
 
           {/* Header */}
           <div className="text-center mb-8">
-            <div className="h-20 w-auto bg-white p-2 rounded-2xl shadow-sm mx-auto mb-4 shrink-0 border border-slate-100 flex items-center justify-center">
-              <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain rounded-xl" />
+            <div className="h-20 w-auto bg-white p-2 shadow-sm mx-auto mb-4 shrink-0 border border-slate-100 flex items-center justify-center">
+              <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain" />
             </div>
-            <div className="flex flex-col items-center leading-none mb-2">
-              <span className="text-2xl font-black tracking-tight text-teal-600">
+            <div className="flex flex-col items-center leading-none mb-3">
+              <span className="text-2xl font-black tracking-[0.15em] text-teal-800 uppercase">
                 Smart Minimarket
               </span>
-              <span className="text-xl font-black text-slate-900 mt-1">
+              <span className="text-sm font-black tracking-[0.3em] text-slate-500 uppercase mt-1.5">
                 Drive Thru
               </span>
             </div>
-            <p className="text-sm text-slate-500 font-semibold">Smart Vending System</p>
           </div>
 
           {/* Error Message */}

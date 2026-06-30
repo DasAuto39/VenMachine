@@ -38,14 +38,29 @@ const Chatbot = ({ items, onAddToCart }) => {
     setIsLoading(true);
 
     try {
+      const token = localStorage.getItem('token');
+      const storedUserStr = localStorage.getItem('user');
+      let fullName = 'Guest';
+      if (storedUserStr) {
+        try {
+          const userObj = JSON.parse(storedUserStr);
+          if (userObj && userObj.full_name) fullName = userObj.full_name;
+        } catch (e) {}
+      }
+
+      const headers = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/chat`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: headers,
         body: JSON.stringify({
           message: userMessage,
-          full_name: 'Guest', // Fallback for ChatRequest model
+          full_name: fullName,
           history: messages.filter(m => m.role !== 'system').map(m => ({
             role: m.role,
             content: m.content

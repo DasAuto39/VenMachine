@@ -6,6 +6,7 @@ from typing import Optional, List, Dict
 import requests
 import json
 import os
+import asyncpg
 from database import DatabasePool
 from auth import get_current_user, get_admin_user
 from mqtt_client import start_mqtt, stop_mqtt, publish_dispense, publish_active_config_async
@@ -26,6 +27,7 @@ from queries import (
     get_transaction_status,
     cancel_transaction,
     get_all_transactions,
+    get_transactions_summary,
     get_user_transactions,
     get_transaction_items,
     register_user,
@@ -65,7 +67,9 @@ app.add_middleware(SlowAPIMiddleware)
 # Mount static files directory
 import os
 os.makedirs("uploads", exist_ok=True)
+os.makedirs("uploads_pp", exist_ok=True)
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+app.mount("/uploads_pp", StaticFiles(directory="uploads_pp"), name="uploads_pp")
 
 
 
@@ -97,6 +101,13 @@ class RegisterRequest(BaseModel):
     full_name: str
     phone: Optional[str] = None
     role: str = 'customer'
+
+class PreferencesUpdate(BaseModel):
+    ai_preferences: str
+
+class UserProfileUpdate(BaseModel):
+    full_name: str
+    phone: Optional[str] = None
 
 class ChatRequest(BaseModel):
     message: str
@@ -143,8 +154,18 @@ class CategoryCreate(BaseModel):
 async def startup():
     pool = await DatabasePool.init()
     
-    # Auto-migrate categories table
+    # Auto-migrate categories and users table
     async with pool.acquire() as conn:
+        # Add ai_preferences and profile_picture column if it doesn't exist
+        try:
+            await conn.execute("ALTER TABLE users ADD COLUMN ai_preferences TEXT")
+        except asyncpg.exceptions.DuplicateColumnError:
+            pass
+        try:
+            await conn.execute("ALTER TABLE users ADD COLUMN profile_picture VARCHAR(255)")
+        except asyncpg.exceptions.DuplicateColumnError:
+            pass
+
         await conn.execute("""
             CREATE TABLE IF NOT EXISTS categories (
                 id SERIAL PRIMARY KEY,
@@ -190,8 +211,28 @@ async def chat_endpoint(request: Request, req: ChatRequest):
     """Chatbot AI Endpoint with Dynamic DB Context"""
     available_items = await get_available_items()
     
+    # Extract auth header and fetch user prefs if possible
+    user_prefs = None
+    auth_header = request.headers.get("Authorization")
+    if auth_header and auth_header.startswith("Bearer "):
+        token = auth_header.split(" ")[1]
+        try:
+            import jwt
+            from auth import SECRET_KEY, ALGORITHM
+            payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+            user_id = int(payload.get("sub"))
+            pool = await DatabasePool.get_pool()
+            async with pool.acquire() as conn:
+                user_prefs = await conn.fetchval("SELECT ai_preferences FROM users WHERE id = $1", user_id)
+        except Exception as e:
+            print("Token validation error in chat_endpoint:", e)
+            
     # Format available items secara singkat untuk menghemat token (tanpa deskripsi panjang)
     item_list_str = "\n".join([f"- ID: {item['id']} | Kategori: {item.get('category', 'Lainnya')} | Nama: {item['name']} | Harga: Rp{item['price']} | Stok: {item['machine_stock']}" for item in available_items])
+    
+    user_profile_context = f"[PROFIL PENGGUNA]\nNama Pengguna: {req.full_name}\n"
+    if user_prefs:
+        user_profile_context += f"Preferensi & Gaya Belanja: {user_prefs}\nAnda DIWAJIBKAN membaca dan mencocokkan setiap rekomendasi produk Anda dengan Preferensi Pengguna ini. Jika pengguna sedang diet, jangan rekomendasikan makanan manis. Jika pengguna suka diskon, berikan barang murah.\n"
     
     system_prompt = f"""
 Anda adalah Asisten Cerdas Vending Machine / Smart Minimarket Drive Thru (SMD).
@@ -199,6 +240,8 @@ Bantu pengguna menemukan dan berbelanja berbagai produk dan kebutuhan yang terse
 
 STOK PRODUK:
 {item_list_str}
+
+{user_profile_context}
 
 TUGAS ANDA:
 1. PERKENALAN AWAL: Jika pengguna hanya menyapa (contoh: "Halo", "Hai", "Pagi"), perkenalkan diri Anda dengan ramah sebagai asisten dan tanyakan apa yang bisa Anda bantu. JANGAN memberikan rekomendasi sebelum diminta.
@@ -339,7 +382,61 @@ CONTOH JSON JIKA USER MENJAWAB SETUJU:
             }
 
 
-# Endpoint 1: Mengambil katalog barang untuk UI React
+@app.put("/api/users/preferences")
+async def update_user_preferences_endpoint(req: PreferencesUpdate, current_user: dict = Depends(get_current_user)):
+    user_id = int(current_user["user_id"])
+    pool = await DatabasePool.get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE users SET ai_preferences = $1 WHERE id = $2", req.ai_preferences, user_id)
+    return {"status": "success", "message": "Preferences updated"}
+
+@app.put("/api/users/profile")
+async def update_user_profile_endpoint(req: UserProfileUpdate, current_user: dict = Depends(get_current_user)):
+    user_id = int(current_user["user_id"])
+    pool = await DatabasePool.get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE users SET full_name = $1, phone = $2 WHERE id = $3", req.full_name, req.phone, user_id)
+    return {"status": "success", "message": "Profile updated", "full_name": req.full_name, "phone": req.phone}
+
+@app.get("/api/users/profile")
+async def get_user_profile_endpoint(current_user: dict = Depends(get_current_user)):
+    user_id = int(current_user["user_id"])
+    pool = await DatabasePool.get_pool()
+    async with pool.acquire() as conn:
+        user = await conn.fetchrow("SELECT username, email, full_name, phone, profile_picture FROM users WHERE id = $1", user_id)
+    return dict(user) if user else {}
+
+@app.post("/api/users/profile-picture")
+async def upload_profile_picture_endpoint(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)):
+    user_id = int(current_user["user_id"])
+    if not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="File must be an image")
+    
+    import uuid
+    import shutil
+    # Buat nama unik dan simpan di /uploads
+    filename = f"{uuid.uuid4().hex}_{file.filename}"
+    filepath = os.path.join("uploads_pp", filename)
+    with open(filepath, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    file_url = f"/uploads_pp/{filename}"
+    
+    pool = await DatabasePool.get_pool()
+    async with pool.acquire() as conn:
+        await conn.execute("UPDATE users SET profile_picture = $1 WHERE id = $2", file_url, user_id)
+        
+    return {"status": "success", "profile_picture": file_url}
+
+@app.get("/api/users/preferences")
+async def get_user_preferences_endpoint(current_user: dict = Depends(get_current_user)):
+    user_id = int(current_user["user_id"])
+    pool = await DatabasePool.get_pool()
+    async with pool.acquire() as conn:
+        prefs = await conn.fetchval("SELECT ai_preferences FROM users WHERE id = $1", user_id)
+    return {"ai_preferences": prefs or ""}
+
+# Endpoints
 @app.get("/api/items")
 async def get_items():
     """Get semua barang yang tersedia (stok > 0)"""
@@ -627,6 +724,12 @@ async def get_transactions_endpoint(limit: int = 50, current_user: dict = Depend
     return await get_all_transactions(limit)
 
 # Endpoint: Get user transactions
+@app.get("/api/admin/transactions/summary")
+async def get_transactions_summary_endpoint(current_user: dict = Depends(get_admin_user)):
+    """Get all-time transaction summary (Admin view)"""
+    return await get_transactions_summary()
+
+# Endpoint: Get user transactions
 @app.get("/api/user/{user_id}/transactions")
 async def get_user_transactions_endpoint(user_id: int, limit: int = 50):
     """Get all transactions for a specific user"""
@@ -696,6 +799,12 @@ async def api_get_categories():
 async def api_create_category(req: CategoryCreate, current_user: dict = Depends(get_admin_user)):
     """Membuat kategori baru (Admin Only)"""
     return await create_category(req.name)
+
+@app.put("/api/admin/categories/{category_id}")
+async def api_update_category(category_id: int, req: CategoryCreate, current_user: dict = Depends(get_admin_user)):
+    """Mengupdate kategori (Admin Only)"""
+    from queries import update_category
+    return await update_category(category_id, req.name)
 
 @app.delete("/api/admin/categories/{category_id}")
 async def api_delete_category(category_id: int, current_user: dict = Depends(get_admin_user)):

@@ -327,6 +327,19 @@ async def get_all_transactions(limit: int = 50) -> List[Dict]:
             })
         
         return result
+        
+async def get_transactions_summary() -> Dict:
+    """Get all-time transaction summary"""
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        result = await connection.fetchrow("""
+            SELECT 
+                COUNT(id) as total_transactions,
+                COUNT(id) FILTER (WHERE payment_status = 'PAID') as total_paid,
+                COALESCE(SUM(total_amount) FILTER (WHERE payment_status = 'PAID'), 0) as total_revenue
+            FROM transactions
+        """)
+        return dict(result)
 
 
 async def get_user_transactions(user_id: int, limit: int = 50) -> List[Dict]:
@@ -825,7 +838,7 @@ async def login_user(username: str, password: str) -> Dict:
         try:
             # Get user by username
             user = await connection.fetchrow(
-                "SELECT id, username, email, password_hash, full_name, role, is_active FROM users WHERE username = $1",
+                "SELECT id, username, email, password_hash, full_name, role, is_active, phone, profile_picture FROM users WHERE username = $1",
                 username
             )
             
@@ -850,6 +863,8 @@ async def login_user(username: str, password: str) -> Dict:
                 "username": user['username'],
                 "email": user['email'],
                 "full_name": user['full_name'],
+                "phone": user['phone'],
+                "profile_picture": user['profile_picture'],
                 "role": user['role'] or 'user',
                 "message": "Login successful"
             }
@@ -1139,3 +1154,17 @@ async def delete_category(category_id: int) -> bool:
             
         await connection.execute("DELETE FROM categories WHERE id = $1", category_id)
         return True
+
+async def update_category(category_id: int, new_name: str) -> Dict:
+    pool = DatabasePool.get_pool()
+    async with pool.acquire() as connection:
+        category = await connection.fetchrow("SELECT name FROM categories WHERE id = $1", category_id)
+        if not category:
+            raise HTTPException(status_code=404, detail="Kategori tidak ditemukan")
+            
+        existing = await connection.fetchval("SELECT id FROM categories WHERE name = $1 AND id != $2", new_name, category_id)
+        if existing:
+            raise HTTPException(status_code=400, detail="Nama kategori sudah digunakan")
+            
+        record = await connection.fetchrow("UPDATE categories SET name = $1 WHERE id = $2 RETURNING id, name", new_name, category_id)
+        return dict(record)

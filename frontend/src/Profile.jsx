@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Newspaper, LogOut, Mail, Phone, ShoppingBag, ShoppingCart, CheckCircle2, Clock, XCircle, ArrowLeft, ChevronDown, ChevronUp, Settings } from 'lucide-react';
+import { Newspaper, LogOut, Mail, Phone, ShoppingBag, ShoppingCart, CheckCircle2, Clock, XCircle, ArrowLeft, ChevronDown, ChevronUp, Settings, Bot, Save, Edit3, X, Camera } from 'lucide-react';
 import smdLogo from './images/smd.jpeg';
 
 function Profile() {
@@ -10,6 +10,16 @@ function Profile() {
   const [isLoading, setIsLoading] = useState(true);
   const [expandedTx, setExpandedTx] = useState(null);
   const [txItems, setTxItems] = useState({});
+  const [aiPreferences, setAiPreferences] = useState('');
+  const [savedAiPreferences, setSavedAiPreferences] = useState('');
+  const [isEditingPrefs, setIsEditingPrefs] = useState(false);
+  const [isSavingPrefs, setIsSavingPrefs] = useState(false);
+  const [saveMessage, setSaveMessage] = useState('');
+  
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileData, setProfileData] = useState({ full_name: '', phone: '' });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
 
   // Authentication check
   useEffect(() => {
@@ -20,7 +30,10 @@ function Profile() {
       try {
         const parsedUser = JSON.parse(storedUser);
         setUser(parsedUser);
+        setProfileData({ full_name: parsedUser.full_name || '', phone: parsedUser.phone || '' });
+        fetchUserProfile();
         fetchTransactions(parsedUser.user_id);
+        fetchPreferences();
       } catch (err) {
         console.error('Error parsing stored user:', err);
         navigate('/login');
@@ -29,6 +42,122 @@ function Profile() {
       navigate('/login');
     }
   }, [navigate]);
+
+  const fetchUserProfile = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => ({ ...prev, ...data }));
+        setProfileData({ full_name: data.full_name || '', phone: data.phone || '' });
+      }
+    } catch (err) {
+      console.error('Error fetching user profile:', err);
+    }
+  };
+
+  const fetchPreferences = async () => {
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/preferences`, {
+        headers: { "Authorization": `Bearer ${localStorage.getItem("token")}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setAiPreferences(data.ai_preferences || '');
+        setSavedAiPreferences(data.ai_preferences || '');
+      }
+    } catch (err) {
+      console.error('Error fetching preferences:', err);
+    }
+  };
+
+  const savePreferences = async () => {
+    setIsSavingPrefs(true);
+    setSaveMessage('');
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/preferences`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify({ ai_preferences: aiPreferences })
+      });
+      if (res.ok) {
+        setSavedAiPreferences(aiPreferences);
+        setIsEditingPrefs(false);
+        setSaveMessage('Preferensi berhasil disimpan!');
+        setTimeout(() => setSaveMessage(''), 3000);
+      } else {
+        setSaveMessage('Gagal menyimpan preferensi.');
+      }
+    } catch (err) {
+      console.error('Error saving preferences:', err);
+      setSaveMessage('Gagal menyimpan preferensi.');
+    } finally {
+      setIsSavingPrefs(false);
+    }
+  };
+
+  const saveUserProfile = async () => {
+    setIsSavingProfile(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: JSON.stringify(profileData)
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => {
+          const newUser = { ...prev, full_name: data.full_name, phone: data.phone };
+          localStorage.setItem('user', JSON.stringify(newUser));
+          return newUser;
+        });
+        setIsEditingProfile(false);
+      }
+    } catch (err) {
+      console.error('Error saving profile:', err);
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  const uploadProfilePicture = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    setIsUploadingImage(true);
+    try {
+      const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/profile-picture`, {
+        method: 'POST',
+        headers: {
+          "Authorization": `Bearer ${localStorage.getItem("token")}`
+        },
+        body: formData
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setUser(prev => {
+          const newUser = { ...prev, profile_picture: data.profile_picture };
+          localStorage.setItem('user', JSON.stringify(newUser));
+          return newUser;
+        });
+      }
+    } catch (err) {
+      console.error('Error uploading profile picture:', err);
+    } finally {
+      setIsUploadingImage(false);
+    }
+  };
 
   const fetchTransactions = async (userId) => {
     try {
@@ -88,16 +217,16 @@ function Profile() {
         {/* Header */}
         <header className="fixed top-0 left-0 right-0 z-40 w-full" style={{ minHeight: '62px' }}>
           <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-teal-400 via-teal-400 to-teal-500" />
-          <div className="w-full h-full backdrop-blur-xl bg-teal-50/95 border-b border-teal-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-4 md:px-8 flex items-center justify-between" style={{ minHeight: '62px' }}>
-            <div className="flex items-center gap-2.5 shrink-0">
-              <div className="h-10 w-auto bg-white p-1 rounded-xl shadow-sm shrink-0 border border-slate-100 flex items-center justify-center">
-                <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain rounded-lg" />
+          <div className="w-full h-full backdrop-blur-xl bg-teal-50/95 border-b border-teal-100 shadow-[0_2px_20px_rgba(16,185,129,0.08)] px-2 sm:px-4 md:px-8 flex items-center justify-between gap-2" style={{ minHeight: '62px' }}>
+            <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+              <div className="h-10 w-auto bg-white p-1 shadow-sm shrink-0 border border-slate-100 flex items-center justify-center">
+                <img src={smdLogo} alt="SMD Logo" className="h-full w-auto object-contain" />
               </div>
               <div className="hidden sm:flex flex-col leading-none justify-center">
-                <span className="text-sm font-black tracking-tight text-teal-600">
+                <span className="text-sm font-black tracking-[0.15em] text-teal-800 uppercase">
                   Smart Minimarket
                 </span>
-                <span className="text-[11px] font-bold text-slate-900">
+                <span className="text-[10px] font-bold tracking-[0.2em] text-slate-500 uppercase mt-0.5">
                   Drive Thru
                 </span>
               </div>
@@ -137,31 +266,178 @@ function Profile() {
           </div>
         </header>
 
-        <main className="max-w-4xl mx-auto px-6 py-8 pt-28 space-y-8">
+        <main className="max-w-4xl mx-auto px-6 py-8 pt-40 sm:pt-32 md:pt-28 space-y-8">
 
           {/* User Info Card */}
           <div className="bg-white/90 backdrop-blur-sm rounded-none-none p-8 shadow-xl shadow-teal-600/10 border border-white/40">
-            <div className="flex items-center gap-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-teal-400 to-teal-500 rounded-none-full flex items-center justify-center text-4xl text-white font-black shadow-lg shadow-teal-500/30">
-                {user.full_name ? user.full_name.charAt(0).toUpperCase() : user.username.charAt(0).toUpperCase()}
-              </div>
-              <div>
-                <h1 className="text-3xl font-black text-slate-800 mb-1">{user.full_name || 'Pengguna'}</h1>
-                <p className="text-teal-600 font-semibold mb-2">@{user.username}</p>
-                <div className="flex flex-wrap gap-4 text-sm text-slate-600 mt-3">
-                  <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-none-none font-medium">
-                    <Mail size={16} className="text-slate-400" />
-                    {user.email || 'Tidak ada email'}
+            <div className="flex flex-col sm:flex-row sm:items-start gap-6">
+              
+              <div className="relative group shrink-0 mx-auto sm:mx-0">
+                {user?.profile_picture ? (
+                  <img src={`${import.meta.env.VITE_API_BASE_URL}${user.profile_picture}`} alt="Profile" className="w-24 h-24 sm:w-28 sm:h-28 rounded-none-full object-cover shadow-lg shadow-teal-500/30 border-4 border-white" />
+                ) : (
+                  <div className="w-24 h-24 sm:w-28 sm:h-28 bg-gradient-to-br from-teal-400 to-teal-500 rounded-none-full flex items-center justify-center text-4xl text-white font-black shadow-lg shadow-teal-500/30 border-4 border-white">
+                    {user?.full_name ? user.full_name.charAt(0).toUpperCase() : user?.username.charAt(0).toUpperCase()}
                   </div>
-                  {user.phone && (
-                    <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-none-none font-medium">
-                      <Phone size={16} className="text-slate-400" />
-                      {user.phone}
-                    </div>
+                )}
+                
+                {/* Upload overlay */}
+                <label className={`absolute inset-0 bg-black/40 text-white rounded-none-full flex flex-col items-center justify-center cursor-pointer transition-opacity ${isUploadingImage ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                  {isUploadingImage ? (
+                    <div className="w-6 h-6 border-2 border-white/30 border-t-white rounded-none-full animate-spin"></div>
+                  ) : (
+                    <>
+                      <Camera size={24} />
+                      <span className="text-[10px] font-semibold mt-1">Ubah Foto</span>
+                      <input type="file" accept="image/*" className="hidden" onChange={uploadProfilePicture} disabled={isUploadingImage} />
+                    </>
                   )}
-                </div>
+                </label>
+              </div>
+
+              <div className="flex-1 text-center sm:text-left">
+                {isEditingProfile ? (
+                  <div className="space-y-3 animate-in fade-in duration-200">
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Nama Lengkap</label>
+                      <input 
+                        type="text" 
+                        value={profileData.full_name} 
+                        onChange={e => setProfileData(p => ({ ...p, full_name: e.target.value }))}
+                        className="w-full sm:max-w-md px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-100 focus:border-teal-400 text-slate-800"
+                        placeholder="Nama Lengkap"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-xs font-bold text-slate-500 mb-1 block">Nomor Telepon</label>
+                      <input 
+                        type="text" 
+                        value={profileData.phone} 
+                        onChange={e => setProfileData(p => ({ ...p, phone: e.target.value }))}
+                        className="w-full sm:max-w-md px-3 py-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-teal-100 focus:border-teal-400 text-slate-800"
+                        placeholder="Nomor Telepon"
+                      />
+                    </div>
+                    
+                    <div className="flex gap-2 justify-center sm:justify-start pt-2">
+                      <button onClick={() => {
+                        setProfileData({ full_name: user?.full_name || '', phone: user?.phone || '' });
+                        setIsEditingProfile(false);
+                      }} className="px-4 py-2 text-sm font-bold text-slate-500 hover:bg-slate-100 rounded-lg transition-colors">
+                        Batal
+                      </button>
+                      <button onClick={saveUserProfile} disabled={isSavingProfile} className="px-4 py-2 text-sm font-bold bg-teal-500 text-white hover:bg-teal-600 rounded-lg transition-colors flex items-center gap-2 shadow-md shadow-teal-500/20">
+                        {isSavingProfile ? 'Menyimpan...' : 'Simpan Perubahan'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mb-2">
+                      <h1 className="text-3xl font-black text-slate-800 leading-none">{user?.full_name || 'Pengguna'}</h1>
+                      <button onClick={() => setIsEditingProfile(true)} className="mx-auto sm:mx-0 p-1.5 text-teal-600 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors text-sm font-semibold flex items-center gap-1.5 w-fit">
+                        <Edit3 size={14} /> Edit Profil
+                      </button>
+                    </div>
+                    
+                    <p className="text-teal-600 font-semibold mb-3">@{user?.username}</p>
+                    
+                    <div className="flex flex-wrap justify-center sm:justify-start gap-3 text-sm text-slate-600">
+                      <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg font-medium border border-slate-200">
+                        <Mail size={16} className="text-slate-400" />
+                        {user?.email || 'Tidak ada email'}
+                      </div>
+                      <div className="flex items-center gap-2 bg-slate-100 px-3 py-1.5 rounded-lg font-medium border border-slate-200">
+                        <Phone size={16} className="text-slate-400" />
+                        {user?.phone || 'Belum ada nomor telepon'}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
+          </div>
+
+          {/* AI Preferences */}
+          <div className="bg-white/90 backdrop-blur-sm rounded-none-none p-8 shadow-xl shadow-indigo-600/10 border border-indigo-100">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-2xl font-black text-slate-800 mb-2 flex items-center gap-3">
+                  <Bot className="text-indigo-500" />
+                  <span>Preferensi Asisten AI</span>
+                </h2>
+                <p className="text-sm text-slate-500">Ceritakan gaya belanja, tujuan, atau pantangan diet Anda. AI akan menyesuaikan rekomendasi khusus untuk Anda.</p>
+              </div>
+              {!isEditingPrefs && (
+                <button
+                  onClick={() => setIsEditingPrefs(true)}
+                  className="p-2 text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors flex items-center gap-2 font-semibold text-sm"
+                >
+                  <Edit3 size={18} />
+                  Ubah
+                </button>
+              )}
+            </div>
+            
+            {isEditingPrefs ? (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
+                <div className="relative">
+                  <textarea
+                    value={aiPreferences}
+                    onChange={(e) => setAiPreferences(e.target.value)}
+                    maxLength={150}
+                    placeholder="Contoh: Saya suka makanan berkuah, atau mencari sabun cuci muka..."
+                    className="w-full h-24 p-4 pb-8 text-sm bg-slate-50 border border-indigo-300 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all resize-none shadow-inner text-slate-700"
+                  />
+                  <div className="absolute bottom-3 right-4 text-xs font-semibold text-slate-400">
+                    {aiPreferences.length}/150
+                  </div>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className={`text-sm font-semibold ${saveMessage.includes('Gagal') ? 'text-rose-500' : 'text-green-500'}`}>
+                    {saveMessage}
+                  </span>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setAiPreferences(savedAiPreferences);
+                        setIsEditingPrefs(false);
+                      }}
+                      className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-all text-sm"
+                    >
+                      Batal
+                    </button>
+                    <button
+                      onClick={savePreferences}
+                      disabled={isSavingPrefs}
+                      className="flex items-center gap-2 px-6 py-2 bg-indigo-600 text-white rounded-lg font-bold hover:bg-indigo-700 transition-all disabled:opacity-50 text-sm shadow-md hover:shadow-lg"
+                    >
+                      <Save size={16} />
+                      {isSavingPrefs ? 'Menyimpan...' : 'Simpan Profil'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 p-5 rounded-xl border border-slate-100">
+                {savedAiPreferences ? (
+                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{savedAiPreferences}</p>
+                ) : (
+                  <div className="text-center py-4">
+                    <p className="text-slate-400 text-sm italic mb-3">Anda belum mengatur preferensi AI.</p>
+                    <button
+                      onClick={() => setIsEditingPrefs(true)}
+                      className="text-indigo-600 text-sm font-bold hover:underline"
+                    >
+                      + Tambah Preferensi Sekarang
+                    </button>
+                  </div>
+                )}
+                {saveMessage && !isEditingPrefs && (
+                  <div className="mt-3 text-sm font-semibold text-green-500">{saveMessage}</div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Transaction History */}
