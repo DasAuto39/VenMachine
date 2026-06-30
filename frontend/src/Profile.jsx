@@ -12,6 +12,8 @@ function Profile() {
   const [txItems, setTxItems] = useState({});
   const [aiPreferences, setAiPreferences] = useState('');
   const [savedAiPreferences, setSavedAiPreferences] = useState('');
+  const [tags, setTags] = useState([]);
+  const [inputValue, setInputValue] = useState('');
   const [isEditingPrefs, setIsEditingPrefs] = useState(false);
   const [isSavingPrefs, setIsSavingPrefs] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
@@ -65,8 +67,10 @@ function Profile() {
       });
       if (res.ok) {
         const data = await res.json();
-        setAiPreferences(data.ai_preferences || '');
-        setSavedAiPreferences(data.ai_preferences || '');
+        const prefStr = data.ai_preferences || '';
+        setAiPreferences(prefStr);
+        setSavedAiPreferences(prefStr);
+        setTags(prefStr ? prefStr.split(', ') : []);
       }
     } catch (err) {
       console.error('Error fetching preferences:', err);
@@ -76,6 +80,7 @@ function Profile() {
   const savePreferences = async () => {
     setIsSavingPrefs(true);
     setSaveMessage('');
+    const compiledPrefs = tags.join(', ');
     try {
       const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/users/preferences`, {
         method: 'PUT',
@@ -83,10 +88,11 @@ function Profile() {
           'Content-Type': 'application/json',
           "Authorization": `Bearer ${localStorage.getItem("token")}`
         },
-        body: JSON.stringify({ ai_preferences: aiPreferences })
+        body: JSON.stringify({ ai_preferences: compiledPrefs })
       });
       if (res.ok) {
-        setSavedAiPreferences(aiPreferences);
+        setSavedAiPreferences(compiledPrefs);
+        setAiPreferences(compiledPrefs);
         setIsEditingPrefs(false);
         setSaveMessage('Preferensi berhasil disimpan!');
         setTimeout(() => setSaveMessage(''), 3000);
@@ -381,16 +387,42 @@ function Profile() {
             
             {isEditingPrefs ? (
               <div className="space-y-4 animate-in fade-in slide-in-from-top-4 duration-300">
-                <div className="relative">
-                  <textarea
-                    value={aiPreferences}
-                    onChange={(e) => setAiPreferences(e.target.value)}
-                    maxLength={150}
-                    placeholder="Contoh: Saya suka makanan berkuah, atau mencari sabun cuci muka..."
-                    className="w-full h-24 p-4 pb-8 text-sm bg-slate-50 border border-indigo-300 rounded-xl focus:border-indigo-500 focus:ring-4 focus:ring-indigo-100 transition-all resize-none shadow-inner text-slate-700"
-                  />
-                  <div className="absolute bottom-3 right-4 text-xs font-semibold text-slate-400">
-                    {aiPreferences.length}/150
+                <div className="bg-slate-50 p-4 rounded-xl border border-indigo-200 shadow-inner flex flex-col gap-3">
+                  <label className="text-sm font-bold text-slate-700">Preferensi Anda (Maksimal 8)</label>
+                  <div className="bg-white border border-slate-300 rounded-lg p-2 min-h-[48px] flex flex-wrap gap-2 items-center focus-within:border-indigo-500 focus-within:ring-2 focus-within:ring-indigo-200 transition-all shadow-sm">
+                    {tags.map((tag, idx) => (
+                      <span key={idx} className="flex items-center gap-1.5 px-3 py-1 bg-indigo-100 text-indigo-700 rounded-full text-xs font-semibold border border-indigo-200">
+                        {tag}
+                        <button 
+                          onClick={() => setTags(tags.filter(t => t !== tag))}
+                          className="hover:bg-indigo-200 text-indigo-500 hover:text-indigo-700 rounded-full p-0.5 transition-colors"
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                    <input
+                      type="text"
+                      value={inputValue}
+                      onChange={(e) => setInputValue(e.target.value)}
+                      disabled={tags.length >= 8}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const newTag = inputValue.trim();
+                          if (newTag && !tags.includes(newTag) && tags.length < 8) {
+                            setTags([...tags, newTag]);
+                          }
+                          setInputValue('');
+                        }
+                      }}
+                      placeholder={tags.length >= 8 ? "Batas maksimal tercapai" : "Ketik preferensi lalu tekan Enter..."}
+                      className="flex-1 min-w-[150px] px-2 py-1 border-none bg-transparent outline-none focus:ring-0 text-slate-700 placeholder-slate-400 text-sm"
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-xs">
+                    <span className="text-slate-400">*Tekan <kbd className="bg-slate-200 px-1.5 py-0.5 rounded text-slate-600 font-mono">Enter</kbd> untuk menambah</span>
+                    <span className={`font-semibold ${tags.length >= 8 ? 'text-rose-500' : 'text-slate-500'}`}>{tags.length}/8 Preferensi</span>
                   </div>
                 </div>
                 <div className="flex items-center justify-between">
@@ -400,7 +432,8 @@ function Profile() {
                   <div className="flex gap-2">
                     <button
                       onClick={() => {
-                        setAiPreferences(savedAiPreferences);
+                        setTags(savedAiPreferences ? savedAiPreferences.split(', ') : []);
+                        setInputValue('');
                         setIsEditingPrefs(false);
                       }}
                       className="px-4 py-2 text-slate-500 hover:bg-slate-100 rounded-lg font-bold transition-all text-sm"
@@ -421,7 +454,13 @@ function Profile() {
             ) : (
               <div className="bg-slate-50 p-5 rounded-xl border border-slate-100">
                 {savedAiPreferences ? (
-                  <p className="text-slate-700 text-sm leading-relaxed whitespace-pre-wrap">{savedAiPreferences}</p>
+                  <div className="flex flex-wrap gap-2">
+                    {savedAiPreferences.split(', ').filter(Boolean).map((tag, idx) => (
+                      <span key={idx} className="px-3 py-1.5 bg-white text-indigo-700 rounded-full text-sm font-semibold border border-indigo-200 shadow-sm">
+                        {tag}
+                      </span>
+                    ))}
+                  </div>
                 ) : (
                   <div className="text-center py-4">
                     <p className="text-slate-400 text-sm italic mb-3">Anda belum mengatur preferensi AI.</p>

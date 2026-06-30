@@ -33,6 +33,9 @@ database_schema.md
 laporan_individu_software.txt
 laporan_venmachine.txt
 .env
+query.txt
+mqtt_listener.py
+
 frontend/node_modules/
 backend/__pycache__
 backend/uploads/*

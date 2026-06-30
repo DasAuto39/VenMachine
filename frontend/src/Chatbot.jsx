@@ -1,11 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 
+// Global cache to persist chat during React Router navigation (lost on hard refresh)
+let cachedMessages = [
+  { role: 'bot', content: 'Halo! Saya asisten VenMachine. Mau masak apa hari ini atau cari barang apa? Biar saya bantu!' }
+];
+let cachedIsOpen = false;
+
 const Chatbot = ({ items, onAddToCart }) => {
-  const [isOpen, setIsOpen] = useState(false);
-  const [messages, setMessages] = useState([
-    { role: 'bot', content: 'Halo! Saya asisten VenMachine. Mau masak apa hari ini atau cari barang apa? Biar saya bantu!' }
-  ]);
+  const [isOpen, setIsOpen] = useState(cachedIsOpen);
+  const [messages, setMessages] = useState(cachedMessages);
+
+  // Sync state changes back to the global cache
+  useEffect(() => {
+    cachedIsOpen = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    cachedMessages = messages;
+  }, [messages]);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef(null);
@@ -45,7 +59,7 @@ const Chatbot = ({ items, onAddToCart }) => {
         try {
           const userObj = JSON.parse(storedUserStr);
           if (userObj && userObj.full_name) fullName = userObj.full_name;
-        } catch (e) {}
+        } catch (e) { }
       }
 
       const headers = {
@@ -204,7 +218,7 @@ const Chatbot = ({ items, onAddToCart }) => {
             </button>
           </div>
           <div className="text-center mt-2">
-            <span className="text-[10px] text-slate-400 font-medium">Powered by Google Gemini 3 Flash</span>
+            <span className="text-[10px] text-slate-400 font-medium">Powered by Google Gemini 2.5 Flash</span>
           </div>
         </form>
       </div>
