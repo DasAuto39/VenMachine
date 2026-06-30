@@ -1,37 +1,41 @@
 # VenMachine - Smart Automated Vending Machine System
 
-Proyek ini adalah implementasi *Smart Vending Machine* berbasis Web dan IoT yang memungkinkan pelanggan berbelanja menggunakan antarmuka web interaktif dengan sistem pengelolaan stok 2 tingkat (Gudang & Mesin), dan diintegrasikan secara *real-time* ke mikrokontroler (ESP32) menggunakan **protokol MQTT**.
-
-Tujuan dari dokumen ini adalah sebagai panduan teknis bagi seluruh anggota tim untuk memahami bagaimana alur komunikasi Web ↔ API ↔ ESP32 bekerja.
+VenMachine adalah implementasi *Smart Vending Machine* berbasis Web dan IoT yang memungkinkan pelanggan berbelanja menggunakan antarmuka e-commerce interaktif dengan integrasi **AI Chatbot Agentic**, sistem pengelolaan stok 2 tingkat (Gudang & Mesin), sistem pembayaran nirkontak (Midtrans QRIS), dan terintegrasi secara *real-time* ke mikrokontroler (ESP32) menggunakan **protokol MQTT**.
 
 ---
 
 ## 🏛️ Arsitektur Sistem & Alur Kerja
 
-Sistem ini terdiri dari 3 komponen utama yang saling berkomunikasi:
-1. **Frontend (React.js)**: Antarmuka UI pelanggan dan Admin.
-2. **Backend (FastAPI)**: Pusat logika bisnis dan manipulasi *Database* (PostgreSQL).
-3. **Perangkat Keras (ESP32)**: Menggerakkan motor *vending* dan sensor stok.
+Sistem ini terdiri dari 3 lapis utama:
+1. **Frontend (React.js + Vite + TailwindCSS)**: Antarmuka UI pelanggan dan Admin Dashboard yang dinamis.
+2. **Backend (FastAPI + Python)**: Pusat logika bisnis, integrasi LLM Gemini, API pembayaran, dan manipulasi *Database* (PostgreSQL).
+3. **Perangkat Keras (ESP32)**: Menggerakkan motor/spiral *vending* dan sensor stok fisik.
 
-**Alur Kerja Utama (Berbelanja & Restock):**
-1. Pembeli mengakses web via kode QR per-gate (`/user?gate=gate_1`).
-2. Pembeli memilih barang dan melakukan pembayaran.
-3. Web mengirim perintah MQTT ke mesin untuk mengeluarkan barang (Dispense).
-4. Jika stok yang ada di mesin kurang dari 2, web/ESP32 akan mengirim sinyal restock.
-5. ESP32 memindahkan stok fisik dari gudang mesin ke etalase depan.
-6. ESP32 melapor via MQTT ke Web bahwa restock berhasil.
-7. Web memanggil API Backend untuk memindahkan angka `warehouse_stock` ke `machine_stock` secara otomatis di database.
+**Alur Kerja Utama (Berbelanja):**
+1. Pembeli mengakses web via pindai kode QR per-gate mesin (contoh: `/user?gate=gate_1`).
+2. Pembeli dapat menggunakan fitur **AI Assistant (Gemini 2.5 Flash)** yang otomatis akan merekomendasikan produk sesuai preferensi unik pengguna (Alergi, Rasa, dsb) dan memasukkannya langsung ke keranjang.
+3. Pembeli melakukan *checkout* dan pembayaran (Midtrans).
+4. Web mengirim perintah MQTT secara asinkronus ke ESP32 untuk mengeluarkan barang (*Dispense*).
+5. ESP32 melapor kembali via MQTT ke Web memicu notifikasi sukses di layar pembeli.
+6. (Otomatis) Jika stok di etalase/mesin menipis, web dan ESP32 bersinergi mensinkronisasi pengisian ulang dari cadangan `warehouse_stock` ke `machine_stock`.
 
 ---
 
-## 📦 Sistem Inventaris 2 Tingkat (Two-Tier Stock)
+## 🤖 AI Assistant (Agentic Gemini 2.5 Flash)
 
-Untuk mensimulasikan penyimpanan pada *vending machine* berukuran besar, stok produk dipisah menjadi dua kolom pada database tabel `items`:
+Fitur unggulan proyek ini adalah **AI Chatbot Pintar** yang revolusioner:
+*   **Dynamic Context Injection**: Prompt yang dikirim ke AI secara dinamis disuntikkan dengan profil pengguna (*Tag Preferences* seperti "Alergi Susu Sapi", "Suka Pedas" - maks. 8 tag) ditambah katalog produk/stok yang sedang *real-time*. AI merespons *secara presisi* tanpa harus dijelaskan berulang-ulang oleh pembeli di obrolan!
+*   **Agentic Workflow (action_items)**: AI pada sistem ini tidak sekadar berbincang. Apabila AI merekomendasikan produk, AI akan mengeluarkan respons dalam format struktur JSON, sehingga Frontend *secara otomatis* dapat menambahkan rekomendasi tersebut langsung ke Keranjang pembeli.
+*   **Session-Storage Persistency**: Obrolan Anda akan tetap ada (tidak hilang) saat Anda berpindah-pindah halaman menu belanja. Obrolan hanya akan lenyap jika Anda me-refresh penuh browser (F5) untuk menjaga privasi.
 
-*   **`machine_stock`**: Stok yang saat ini **terpajang di etalase** *vending machine* dan siap dibeli. (Kapasitas maksimal: **10** per produk).
-*   **`warehouse_stock`**: Stok cadangan yang tersimpan **di ruang penyimpanan** (gudang/belakang mesin). 
+---
 
-Jika `machine_stock` menipis, mesin akan secara otomatis mengisi ulang dari `warehouse_stock`. Pembeli **hanya** bisa membeli barang selama `machine_stock` > 0.
+## 📦 Sistem Inventaris & Normalisasi Tabel
+
+Untuk mensimulasikan penyimpanan cerdas, stok produk dipisah ke dua kolom di tabel `items`:
+*   **`machine_stock`**: Stok yang **terpajang fisik di etalase** (Maksimal: **10** per rak).
+*   **`warehouse_stock`**: Stok cadangan di gudang (*storage*).
+Database sepenuhnya dinormalisasi menggunakan *Foreign Key* kuat menuju tabel `categories` dan `storage_locations`. (Mendukung `ON UPDATE CASCADE`). Secara fisik, proyek Capstone/Tugas Akhir ini dibatasi pada 5 jumlah laci rak (`row_position`).
 
 ---
 
@@ -80,118 +84,62 @@ Saat pelanggan selesai membayar via Midtrans, Web akan mem-publish perintah ke m
     Berisi *array* dari Nomor Laci/Motor (`location_id`) yang barangnya dibeli. ESP32 bisa langsung memutar motor sesuai angka ini.
     ```json
     {
-      "items": [6, 6, 7]
+      "items": [1, 1, 2]
     }
     ```
 
 ### 4. Laporan Eksekusi Dispense (ESP32 → Web)
-Setiap kali ESP32 *selesai* menjatuhkan 1 buah barang fisik, ESP32 melapor ke Web agar Web menampilkan notifikasi pop-up sukses ke pengguna, dan Backend mencatatnya ke tabel Log (*crosscheck*).
-*   **Topik 1 (Untuk Pop-Up Frontend)**: `vending/stock`
-    *   **Payload JSON**: `{"item": 101}`
-*   **Topik 2 (Untuk Log Database)**: `vending/{machineId}/restock` *(Contoh: `vending/VM001/restock`)*
-    *   **Payload JSON**: `{"item": 101}`
-
-*(Catatan: Pengurangan stok utama di database sudah dilakukan seketika saat pembayaran Midtrans sukses untuk menghindari race-condition. Pesan MQTT dari ESP32 ini digunakan semata-mata sebagai notifikasi layar dan log verifikasi fisik).*
----
-
-## 🔌 Dokumentasi API Utama (FastAPI)
-
-Semua *endpoint* API berjalan pada basis URL `http://localhost:8000`. Berikut adalah endpoint kunci untuk pengembangan:
-
-### 1. Proses Pembayaran
-*   **Endpoint:** `POST /api/payment`
-*   **Fungsi:** Mengurangi `machine_stock` dan membuat catatan log transaksi.
-*   **Payload Request:**
-    ```json
-    {
-      "items": [
-        {"item_id": 1, "quantity": 1, "price": 15000}
-      ],
-      "total_amount": 15000,
-      "payment_method": "QRIS",
-      "gate": "gate_1"
-    }
-    ```
-*   **Response (Penting):** Mengembalikan data `dispensed_items` yang memuat sisa `remaining_machine_stock` terbaru. Angka inilah yang memicu web mengirim sinyal MQTT `RESTOCK` jika nilainya < 2.
-
-### 2. Sinkronisasi Database Restock (Internal)
-*   **Endpoint:** `POST /api/items/{item_id}/restock`
-*   **Fungsi:** Memindahkan nilai `warehouse_stock` ke `machine_stock` secara atomik di database (hingga mesin kembali penuh maksimal 10).
-*   **Trigger:** Otomatis dipanggil oleh Frontend React seketika setelah menerima pesan MQTT `RESTOCK_DONE` dari ESP32. Tidak perlu parameter JSON *body*.
-
-### 3. Mendapatkan Daftar Produk
-*   **Endpoint:** `GET /api/items`
-*   **Response:**
-    ```json
-    [
-      {
-        "id": 1,
-        "name": "Wortel Premium",
-        "price": 15000,
-        "machine_stock": 10,
-        "warehouse_stock": 30,
-        "location_code": "ROW1"
-      }
-    ]
-    ```
+Setiap kali ESP32 *selesai* menjatuhkan barang fisik, ia mempublikasikan pesan balik ke web:
+*   **Topik Notifikasi Frontend**: `vending/stock` -> `{"item": 101}`
 
 ---
 
-## 🌍 Setup Ngrok (Solusi QR Code Statis & Akses Publik)
+## 🔌 Endpoint API Utama (FastAPI)
 
-Agar Web Vending Machine dapat diakses oleh HP pembeli dari mana saja (berbeda jaringan) dan Anda **tidak perlu mencetak ulang QR Code** setiap kali IP laptop berubah (akibat Hotspot HP), gunakan **Ngrok**.
+REST API dapat diakses di `http://localhost:8000/docs` (Swagger UI).
+*   `POST /api/chat`: Menyatukan riwayat obrolan, preferensi profil, dan stok, lalu meneruskannya ke Gemini.
+*   `POST /api/checkout`: Mengunci stok sementara dan menerbitkan `transaction_id`.
+*   `POST /api/midtrans/token`: Interkoneksi SDK Midtrans untuk Snap Token pembayaran.
+*   `POST /api/payment`: Verifikasi akhir setelah QRIS sukses dan pemicu utama publish perintah *Dispense* MQTT.
 
-### 1. Cara Penggunaan Ngrok
-Ngrok memberikan Anda sebuah *Link Publik* statis yang membungkus koneksi lokal laptop Anda.
-1. Download dan *install* Ngrok di laptop.
-2. Dapatkan *Authtoken* dari *dashboard* Ngrok.
-3. Klaim satu buah *Free Static Domain* dari menu Domains (contoh: `rental-defiance-pry.ngrok-free.dev`).
-4. Jalankan *tunnel* menuju port Frontend (`5173`) dengan perintah:
+---
+
+## 🌍 Setup Ngrok (Solusi Akses Publik & Mixed Content)
+
+Agar *smartphone* pelanggan yang berbeda jaringan WiFi dapat memindai QR dan memesan dengan aman (HTTPS), sistem ini ditenagai oleh **Ngrok**. 
+*   **Penangkal Mixed Content**: Vite Frontend dikonfigurasi sebagai *Proxy internal*. Oleh karena itu, *variabel lingkungan* `VITE_API_BASE_URL` disengaja dibiarkan *kosong*, supaya panggilan API dari HP menggunakan URL relatif (`/api/items`) yang kemudian dicegat oleh Vite di *localhost* Laptop dan dibelokkan ke peladen Backend Docker. Ini mencegah browser HP memblokir *request*!
+
+Jalankan perintah ini di laptop *host*:
+```bash
+ngrok http 5173 --domain=domain-anda.ngrok-free.dev
+```
+
+---
+
+## 🚀 Cara Menjalankan Project (Docker)
+
+Sistem telah di-*containerization* sehingga terbebas dari pusing instalasi modul Python atau Node.
+1. Salin `.env.example` ke `.env` (isi GEMINI_API_KEY dan Kredensial Midtrans).
+2. Dari *root* proyek, buka terminal dan jalankan:
    ```bash
-   ngrok http 5173 --domain=domain-anda.ngrok-free.dev
-   ```
-5. Cetak QR Code yang berisi link `https` tersebut dan tempel di mesin Vending Anda.
-
-### 2. Kenapa `VITE_API_BASE_URL` Dikosongkan?
-Saat Anda menjalankan Ngrok, browser HP mengakses web via `https`. Jika *Frontend* mencoba melakukan panggilan API (*fetch*) ke `http://192.168.x.x` (IP lokal *Backend*), browser HP akan memblokirnya secara paksa karena masalah **Mixed Content** (menghubungkan `https` aman ke `http` tidak aman).
-
-Solusinya: Server Frontend (Vite) telah diatur sebagai **Proxy** (di dalam `vite.config.js`). Karena `VITE_API_BASE_URL` dikosongkan (tanpa IP angka), *request* API dari web di HP akan dikirim ke *path* relatif seperti `/api/items` (jadi otomatis menumpang *domain* Ngrok). Server Vite di laptop Anda kemudian mencegat *request* tersebut dan secara diam-diam meneruskannya ke kontainer *Backend* (`http://backend:8000`) di dalam Docker. Ini memecahkan *error Mixed Content* 100%!
-
-### 3. Apakah HP Pembeli Harus Satu Jaringan Wi-Fi?
-**TIDAK.** Karena QR Code yang dipindai mengarah ke Ngrok
----
-
-## 🚀 Cara Menjalankan Project Secara Lokal
-
-Sistem ini telah dibungkus sepenuhnya menggunakan **Docker** sehingga meminimalisir masalah *environment*.
-
-1. Pastikan **Docker** dan **Docker Compose** telah terpasang.
-2. Buka terminal di dalam *root folder* proyek `VenMachine/`.
-3. Jika ini pertama kali dijalankan, atau jika Anda baru saja merubah skema struktur *database* di `db.sql`, jalankan:
-   ```bash
-   sudo docker compose down -v
    sudo docker compose up -d --build
-   ```
-4. Jika hanya ingin mematikan dan menghidupkan tanpa menghapus data (*restart* harian):
-   ```bash
-   sudo docker compose stop
-   sudo docker compose start
    ```
 
 **Akses Lokal:**
-*   Frontend (Web): `http://localhost:5173`
-*   Backend API (Swagger Docs): `http://localhost:8000/docs`
+*   **Frontend (Web UI)**: `http://localhost:5173`
+*   **Backend (API Server)**: `http://localhost:8000`
 
 ---
 
-## 🔐 User Credentials (Akun Demo)
+## 🔐 Manajemen Akun Admin
 
-Cara untuk menambahkan user dengan role admin
+Untuk membuka dasbor Administrator (pengelola mesin):
+1. Daftar (*Register*) akun biasa dari halaman web.
+2. Berikan hak akses *God Mode* (Admin) menggunakan perintah SQL di terminal PostgreSQL Anda:
+   ```sql
+   UPDATE users SET role = 'admin' WHERE username = 'nama_anda';
+   ```
+3. Keluar (Logout) dan masuk kembali (Login) untuk memunculkan tombol menu **Dashboard Admin**.
 
-Di web bisa menambahkan akun terlebih dahulu dengan role user, lalu login sebagai user dan mengubah role user tersebut menjadi admin, setelah itu logout dan login kembali sebagai admin untuk bisa mengakses halaman admin
-
-Di dalam database bisa menggunakan query SQL berikut
-
-UPDATE users SET role = 'admin' WHERE username = 'uname(digantisendiri)'
-
-*Dokumentasi ini akan terus diperbarui sejalan dengan perkembangan integrasi Hardware-ke-Software tim capstone.*
+---
+*Dokumentasi ini mencerminkan pembaruan kode terkini per Juni 2026.*
