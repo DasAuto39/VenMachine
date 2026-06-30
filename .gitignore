@@ -49,6 +49,7 @@ implementation_plan.md
 frontend/.env
 mqtt_listener.py
 justincase.txt
+backend/venmachineDB_Backup.sql
 # PyInstaller
 #  Usually these files are written by a python script from a template
 #  before PyInstaller builds the exe, so as to inject date/other infos into it.

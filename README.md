@@ -116,18 +116,40 @@ ngrok http 5173 --domain=domain-anda.ngrok-free.dev
 
 ---
 
-## 🚀 Cara Menjalankan Project (Docker)
+## 🛠️ Panduan Setup & Instalasi (Dari Nol)
 
-Sistem telah di-*containerization* sehingga terbebas dari pusing instalasi modul Python atau Node.
-1. Salin `.env.example` ke `.env` (isi GEMINI_API_KEY dan Kredensial Midtrans).
-2. Dari *root* proyek, buka terminal dan jalankan:
-   ```bash
-   sudo docker compose up -d --build
-   ```
+Sistem ini telah dibungkus seluruhnya ke dalam kontainer (**Docker**), sehingga Anda terbebas dari kerumitan instalasi dependensi rumit (Python, Node.js, atau PostgreSQL) di perangkat lokal Anda.
 
-**Akses Lokal:**
-*   **Frontend (Web UI)**: `http://localhost:5173`
-*   **Backend (API Server)**: `http://localhost:8000`
+
+### Langkah 1: Kloning Repositori
+Buka terminal (Command Prompt / PowerShell / Terminal), arahkan ke folder kerja Anda, lalu ketik perintah berikut:
+```bash
+git clone https://github.com/DasAuto39/VenMachine.git
+cd VenMachine
+```
+
+### Langkah 2: Konfigurasi Environment (Kredensial Rahasia)
+Proyek ini membutuhkan Kunci API (*API Keys*) agar AI Gemini dan Sistem Pembayaran Midtrans dapat bekerja.
+1. Salin file *template* yang telah kami sediakan:
+   *   *(Di Windows CMD/PowerShell)*: `copy .env.example .env`
+   *   *(Di Linux/Mac/Git Bash)*: `cp .env.example .env`
+2. Buka file `.env` yang baru terbentuk (di *root* folder) menggunakan *Text Editor* (seperti VS Code atau Notepad).
+3. Isi parameter yang kosong, yang terpenting adalah:
+   *   `GEMINI_API_KEY`: Dapatkan gratis dari Google AI Studio.
+   *   `MIDTRANS_SERVER_KEY`: Dapatkan dari *Dashboard Sandbox Midtrans* Anda.
+   *   `VITE_MIDTRANS_CLIENT_KEY`: Kunci klien Midtrans (dari menu *Settings* -> *Access Keys* Midtrans).
+
+### Langkah 3: Menjalankan Sistem (Build & Run)
+Setelah konfigurasi rahasia Anda tersimpan, saatnya menyalakan mesin uatamanya. Jalankan perintah ini:
+```bash
+docker compose up -d --build
+```
+> ⏳ **Penting:** Jika ini adalah kali pertama Anda menjalankannya, Docker akan mengunduh *image* basis (Node, Python, PostgreSQL) yang ukurannya bisa mencapai ratusan *Megabytes*. Harap bersabar menunggu (bisa memakan waktu 5-15 menit tergantung kecepatan internet Anda).
+
+### Langkah 4: Mengakses Web
+Jika terminal sudah tidak bekerja dan menampilkan pesan hijau `Started` atau `Running` pada semua kontainer, buka *browser* Anda:
+*   **Web Pelanggan / Frontend**: `http://localhost:5173`
+*   **Panel Database/API (Swagger)**: `http://localhost:8000/docs`
 
 ---
 
